@@ -18,10 +18,18 @@
 import copy
 import logging
 
+from django.core.exceptions import FieldDoesNotExist
+from django.db.models import BooleanField
+from django.db.models import Case
 from django.db.models import F
+from django.db.models import IntegerField
+from django.db.models import Max
+from django.db.models import Q
 from django.db.models import Value
+from django.db.models import When
 from django.db.models import Window
 from django.db.models.expressions import Func
+from django.db.models.functions import Cast
 from django.db.models.functions import Coalesce
 from django.db.models.functions import Concat
 from django.db.models.functions import RowNumber
@@ -242,6 +250,23 @@ class AWSReportQueryHandler(ReportQueryHandler):
                 query_data = query_data.annotate(
                     account_alias=Coalesce(F(self._mapper.provider_map.get("alias")), "usage_account_id")
                 )
+                try:
+                    # Try to grab an existing field in the views that we can populate
+                    self.query_table._meta.get_field("tags_exist")
+                    tag_query = F("tags_exist")
+                except FieldDoesNotExist:
+                    # Fall back to checking the daily_summary table
+                    tag_query = Cast(
+                        Max(
+                            Case(
+                                When(Q(tags__isnull=False) | ~Q(tags={}), then=Value(1)),
+                                default=Value(0),
+                                output_field=IntegerField(),
+                            )
+                        ),
+                        output_field=BooleanField(),
+                    )
+                query_data = query_data.annotate(**{"tags_exist": tag_query})
 
             query_sum = self._build_sum(query, annotations)
 

@@ -68,6 +68,8 @@ SOURCE_PROVIDER_MAP = {
     SOURCES_AZURE_SOURCE_NAME: Provider.PROVIDER_AZURE,
 }
 
+FORCE_COMMIT_LIST = []
+
 
 class SourcesIntegrationError(ValidationError):
     """Sources Integration error."""
@@ -75,6 +77,20 @@ class SourcesIntegrationError(ValidationError):
 
 class SourcesMessageError(ValidationError):
     """Sources Message error."""
+
+
+def queue_force_commit_kafka_msg(msg_offset):
+    FORCE_COMMIT_LIST.append(msg_offset)
+    LOG.info(f"{msg_offset} queued for force kafka commit.")
+
+
+async def process_force_commit_list(consumer, msg):
+    for index, item in enumerate(FORCE_COMMIT_LIST):
+        if int(item.get("offset")) == msg.get("offset") and int(item.get("partition")) == msg.get("partition"):
+            LOG.info(f"Committing message with offset: {item.get('offset')}, partition: {item.get('partition')}")
+            await consumer.commit()
+            FORCE_COMMIT_LIST.pop(index)
+        LOG.info(f"Force Commit List Contents: {str(FORCE_COMMIT_LIST)}")
 
 
 def _extract_from_header(headers, header_type):
@@ -174,6 +190,7 @@ def get_sources_msg_data(msg, app_type_id):
                     LOG.debug("Application Message: %s", str(msg))
                     msg_data["event_type"] = event_type
                     msg_data["offset"] = msg.offset
+                    msg_data["partition"] = msg.partition
                     msg_data["source_id"] = int(value.get("source_id"))
                     msg_data["auth_header"] = _extract_from_header(msg.headers, KAFKA_HDR_RH_IDENTITY)
             elif event_type in (KAFKA_AUTHENTICATION_CREATE, KAFKA_AUTHENTICATION_UPDATE):
@@ -181,12 +198,14 @@ def get_sources_msg_data(msg, app_type_id):
                 if value.get("resource_type") == "Endpoint":
                     msg_data["event_type"] = event_type
                     msg_data["offset"] = msg.offset
+                    msg_data["partition"] = msg.partition
                     msg_data["resource_id"] = int(value.get("resource_id"))
                     msg_data["auth_header"] = _extract_from_header(msg.headers, KAFKA_HDR_RH_IDENTITY)
             elif event_type in (KAFKA_SOURCE_DESTROY, KAFKA_SOURCE_UPDATE):
                 LOG.debug("Source Message: %s", str(msg))
                 msg_data["event_type"] = event_type
                 msg_data["offset"] = msg.offset
+                msg_data["partition"] = msg.partition
                 msg_data["source_id"] = int(value.get("id"))
                 msg_data["auth_header"] = _extract_from_header(msg.headers, KAFKA_HDR_RH_IDENTITY)
             else:
@@ -449,6 +468,8 @@ async def listen_for_messages(consumer, application_source_id):  # noqa: C901
                 await consumer.commit()
                 continue
             if msg:
+                LOG.info("Processing force commit list.")
+                await process_force_commit_list(consumer, msg)
                 LOG.info(f"Cost Management Message to process: {str(msg)}")
                 try:
                     await process_message(application_source_id, msg)

@@ -18,6 +18,7 @@ from django.conf.urls import include
 from django.conf.urls import url
 from rest_framework.routers import DefaultRouter
 
+from sources.api.admin_commit import admin_commit
 from sources.api.status import get_status
 from sources.api.views import source_status
 from sources.api.views import SourcesViewSet
@@ -28,6 +29,7 @@ ROUTER.register(r"sources", SourcesViewSet)
 # # pylint: disable=invalid-name
 urlpatterns = [
     url(r"^status/$", get_status, name="server-status"),
+    url(r"^admin-commit/$", admin_commit, name="admin-commit"),
     url(r"^source-status/?$", source_status, name="source-status"),
     url(r"^", include(ROUTER.urls)),
 ]

@@ -7,8 +7,32 @@ services:
         context: .
         dockerfile: Dockerfile-env
 
+  koku-migrate:
+    container_name: koku_migrate
+    restart: on-failure:25
+    image: koku_base
+    working_dir: /koku
+    entrypoint:
+      - /koku/run_migrations.sh
+    environment:
+      - DATABASE_SERVICE_NAME=POSTGRES_SQL
+      - DATABASE_ENGINE=postgresql
+      - DATABASE_NAME=${DATABASE_NAME-postgres}
+      - POSTGRES_SQL_SERVICE_HOST=db
+      - POSTGRES_SQL_SERVICE_PORT=5432
+      - DATABASE_USER=${DATABASE_USER-postgres}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD-postgres}
+    volumes:
+      - '.:/koku/'
+    links:
+      - db
+    depends_on:
+      - koku-base
+      - db
+
   koku-server:
       container_name: koku_server
+      restart: on-failure:25
       image: koku_base
       working_dir: /koku
       entrypoint:
@@ -52,10 +76,11 @@ services:
         - masu-server
       depends_on:
         - koku-base
-        - db
+        - koku-migrate
 
   masu-server:
       container_name: masu_server
+      restart: on-failure:25
       image: koku_base
       working_dir: /koku
       entrypoint:
@@ -97,7 +122,7 @@ services:
         - koku-rabbit
       depends_on:
         - koku-base
-        - db
+        - koku-migrate
 
   redis:
     container_name: koku_redis
@@ -154,6 +179,7 @@ services:
 
   koku-worker:
       container_name: koku_worker
+      restart: on-failure:25
       hostname: koku_worker
       image: koku_base
       working_dir: /koku/koku
@@ -210,6 +236,7 @@ services:
 
   koku-listener:
       container_name: koku_listener
+      restart: on-failure:25
       image: koku_base
       working_dir: /koku/
       entrypoint: ['python', 'koku/manage.py', 'listener']
@@ -245,7 +272,7 @@ services:
         - koku-rabbit
       depends_on:
         - koku-base
-        - db
+        - koku-migrate
         - koku-rabbit
 
   sources-client:
@@ -282,6 +309,7 @@ services:
         - db
       depends_on:
         - koku-base
+        - koku-migrate
 
   koku-beat:
       container_name: koku_beat
@@ -317,6 +345,7 @@ services:
       depends_on:
           - koku-base
           - koku-rabbit
+          - koku-migrate
 
   pushgateway:
     container_name: koku-pushgateway

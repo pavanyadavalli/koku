@@ -15,10 +15,45 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 """API application configuration module."""
+import os
+
 from django.apps import AppConfig
+from django.db import connections
+from django.db import DEFAULT_DB_ALIAS
+from django.db.migrations.executor import MigrationExecutor
+
+
+def check_migrations():
+    """
+    Check the status of database migrations.
+
+    The koku API server is responsible for running all database migrations.  This method
+    will return the state of the database and whether or not all migrations have been completed.
+
+    Hat tip to the Stack Overflow contributor: https://stackoverflow.com/a/31847406
+
+    Returns:
+        Boolean - True if database is available and migrations have completed.  False otherwise.
+
+    """
+    connection = connections[DEFAULT_DB_ALIAS]
+    connection.prepare_database()
+    executor = MigrationExecutor(connection)
+    targets = executor.loader.graph.leaf_nodes()
+    return not executor.migration_plan(targets)
 
 
 class ApiConfig(AppConfig):
     """API application configuration."""
 
     name = "api"
+
+    def ready(self):
+        RUNNING_MIGRATIONS = False if os.getenv("RUNNING_MIGRATIONS", "False") == "False" else True
+        print("API ready called. RUNNING_MIGRATIONS: ", str(RUNNING_MIGRATIONS))
+        if not RUNNING_MIGRATIONS:
+            if check_migrations():
+                print("Migations are ready")
+            else:
+                print("Migrations are not ready")
+                exit(1)

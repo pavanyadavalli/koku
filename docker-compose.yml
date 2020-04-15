@@ -273,6 +273,7 @@ services:
         - SOURCES_KAFKA_HOST=${SOURCES_KAFKA_HOST-kafka}
         - SOURCES_KAFKA_PORT=${SOURCES_KAFKA_PORT-29092}
         - prometheus_multiproc_dir=/tmp
+        - SIMULATE_NETWORK_DELAY_SECONDS=${SIMULATE_NETWORK_DELAY_SECONDS-5}
       privileged: true
       ports:
           - 4000:8080

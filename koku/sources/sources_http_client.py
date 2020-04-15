@@ -15,10 +15,32 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 """Sources HTTP Client."""
+import logging
+import time
+from random import randrange
+
 import requests
 from requests.exceptions import RequestException
 
 from sources.config import Config
+
+LOG = logging.getLogger(__name__)
+
+
+def simulated_network_latency(func):
+    def wrapped(*args, **kwargs):
+        sleep_seconds = randrange(Config.SIMULATE_NETWORK_DELAY_SECONDS)
+        LOG.info("Sleep Seconds: %s", str(sleep_seconds))
+        if sleep_seconds != 0:
+            LOG.info("{} delaying for {} seconds".format(func.__name__, str(sleep_seconds)))
+            time.sleep(sleep_seconds)
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                LOG.info(f"Exception in {func.__name__} : {e}")
+        return func(*args, **kwargs)
+
+    return wrapped
 
 
 class SourcesHTTPClientError(Exception):
@@ -40,6 +62,7 @@ class SourcesHTTPClient:
         header = {"x-rh-identity": auth_header}
         self._identity_header = header
 
+    @simulated_network_latency
     def get_source_details(self):
         """Get details on source_id."""
         url = "{}/{}/{}".format(self._base_url, "sources", str(self._source_id))
@@ -49,6 +72,7 @@ class SourcesHTTPClient:
         response = r.json()
         return response
 
+    @simulated_network_latency
     def get_endpoint_id(self):
         """Get Sources Endpoint ID from Source ID."""
         endpoint_url = f"{self._base_url}/endpoints?filter[source_id]={self._source_id}"
@@ -64,6 +88,7 @@ class SourcesHTTPClient:
 
         return endpoint_id
 
+    @simulated_network_latency
     def get_source_id_from_endpoint_id(self, resource_id):
         """Get Source ID from Sources Endpoint ID."""
         endpoint_url = f"{self._base_url}/endpoints?filter[id]={resource_id}"
@@ -79,6 +104,7 @@ class SourcesHTTPClient:
 
         return source_id
 
+    @simulated_network_latency
     def get_application_type_is_cost_management(self, source_id):
         """Get application_type_id from source_id."""
         cost_mgmt_id = self.get_cost_management_application_type_id()
@@ -94,6 +120,7 @@ class SourcesHTTPClient:
 
         return cost_mgmt_type
 
+    @simulated_network_latency
     def get_cost_management_application_type_id(self):
         """Get the cost management application type id."""
         application_type_url = "{}/application_types?filter[name]=/insights/platform/cost-management".format(
@@ -113,6 +140,7 @@ class SourcesHTTPClient:
         application_type_id = endpoint_response.get("data")[0].get("id")
         return int(application_type_id)
 
+    @simulated_network_latency
     def get_source_type_name(self, type_id):
         """Get the source name for a give type id."""
         application_type_url = f"{self._base_url}/source_types?filter[id]={type_id}"
@@ -128,6 +156,7 @@ class SourcesHTTPClient:
         source_name = endpoint_response.get("data")[0].get("name")
         return source_name
 
+    @simulated_network_latency
     def get_aws_role_arn(self):
         """Get the roleARN from Sources Authentication service."""
         endpoint_url = "{}/endpoints?filter[source_id]={}".format(self._base_url, str(self._source_id))
@@ -157,6 +186,7 @@ class SourcesHTTPClient:
 
         return password
 
+    @simulated_network_latency
     def get_azure_credentials(self):
         """Get the Azure Credentials from Sources Authentication service."""
         endpoint_url = f"{self._base_url}/endpoints?filter[source_id]={str(self._source_id)}"
@@ -194,6 +224,7 @@ class SourcesHTTPClient:
         }
         return azure_credentials
 
+    @simulated_network_latency
     def set_source_status(self, error_msg, cost_management_type_id=None):
         """Set the source status with error message."""
         if not cost_management_type_id:

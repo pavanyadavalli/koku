@@ -45,6 +45,12 @@ objects:
               secretKeyRef:
                 key: data-source-name
                 name: ${NAME}
+          - name: PG_EXPORTER_EXTEND_QUERY_PATH
+            value: /opt/app-root/etc/queries.yaml
+          volumeMounts:
+            - name: query-yaml
+                readOnly: true
+                mountPath: /opt/app-root/etc
           image: ${NAMESPACE}/${NAME}:latest
           imagePullPolicy: Always
           name: postgresql-exporter
@@ -57,6 +63,15 @@ objects:
         restartPolicy: Always
         schedulerName: default-scheduler
         terminationGracePeriodSeconds: 30
+        volumes:
+            - name: query-yaml
+              projected:
+                sources:
+                - configMap:
+                    name: koku-app
+                    items:
+                      - key: query-yaml
+                        path: queries.yaml
     test: false
     triggers:
     - type: ConfigChange

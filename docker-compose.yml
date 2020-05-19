@@ -10,7 +10,7 @@ services:
   koku-server:
       container_name: koku_server
       image: koku_base
-      working_dir: /koku
+      working_dir: /koku/koku
       entrypoint:
         - /koku/run_server.sh
       environment:
@@ -41,9 +41,10 @@ services:
         - API_PATH_PREFIX=${API_PATH_PREFIX-/api/cost-management}
         - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
         - DEMO_ACCOUNTS=${DEMO_ACCOUNTS-{}}
+        - POD_CPU_LIMIT=${POD_CPU_LIMIT-1}
       privileged: true
       ports:
-          - 8000:8000
+          - 8000:8080
       volumes:
         - '.:/koku/'
       links:
@@ -115,7 +116,7 @@ services:
     ports:
       - "15432:5432"
     volumes:
-      - ./pg_data:/var/lib/${DATABASE_DATA_DIR-postgresql}/data
+      #- ./pg_data:/var/lib/${DATABASE_DATA_DIR-postgresql}/data
       - ./pg_init:/docker-entrypoint-initdb.d
     command:
       # This command give more precise control over the parameter settings

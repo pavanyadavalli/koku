@@ -58,7 +58,7 @@ services:
   masu-server:
       container_name: masu_server
       image: koku_base
-      working_dir: /koku
+      working_dir: /koku/koku
       entrypoint:
         - /koku/run_internal.sh
       environment:
@@ -88,9 +88,10 @@ services:
         - MASU_SECRET_KEY=abc
         - prometheus_multiproc_dir=/tmp
         - API_PATH_PREFIX=${API_PATH_PREFIX-/api/cost-management}
+        - POD_CPU_LIMIT=${POD_CPU_LIMIT-1}
       privileged: true
       ports:
-          - 5000:8000
+          - 5000:8080
       volumes:
         - '.:/koku/'
       links:

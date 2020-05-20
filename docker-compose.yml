@@ -10,6 +10,12 @@ services:
   koku-server:
       container_name: koku_server
       image: koku_base
+      #deploy:
+      #  resources:
+      #    limits:
+      #      cpus: '0.50'
+      #    reservations:
+      #      cpus: '0.25'
       working_dir: /koku/koku
       entrypoint:
         - /koku/run_server.sh
@@ -161,19 +167,6 @@ services:
     - "${PGADMIN_PORT-8432}:80"
     volumes:
       - ./pgadmin_servers.json:/pgadmin4/servers.json
-
-  grafana:
-    container_name: koku_grafana
-    build:
-        context: grafana
-        dockerfile: Dockerfile-grafana
-    ports:
-        - 3001:3000
-    links:
-        - db
-    depends_on:
-        - koku-base
-        - db
 
   koku-rabbit:
       container_name: koku_rabbit

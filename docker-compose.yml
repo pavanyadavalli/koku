@@ -42,6 +42,9 @@ services:
         - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
         - DEMO_ACCOUNTS=${DEMO_ACCOUNTS-{}}
         - POD_CPU_LIMIT=${POD_CPU_LIMIT-1}
+        - LOG_LEVEL=ERROR
+        - DJANGO_LOG_LEVEL=ERROR
+        - KOKU_LOG_LEVEL=ERROR
       privileged: true
       ports:
           - 8000:8080
@@ -206,7 +209,9 @@ services:
         - SOURCES_API_HOST=${SOURCES_API_HOST-sources-server}
         - SOURCES_API_PORT=${SOURCES_API_PORT-3000}
         - DEVELOPMENT=${DEVELOPMENT-True}
-        - LOG_LEVEL=INFO
+        - LOG_LEVEL=ERROR
+        - DJANGO_LOG_LEVEL=ERROR
+        - KOKU_LOG_LEVEL=ERROR
         - DJANGO_SETTINGS_MODULE=koku.settings
         - MASU_SECRET_KEY=abc
         - prometheus_multiproc_dir=/tmp
@@ -268,7 +273,9 @@ services:
         - prometheus_multiproc_dir=/tmp
         - MASU_DATE_OVERRIDE
         - MASU_DEBUG
-        - LOG_LEVEL=INFO
+        - LOG_LEVEL=ERROR
+        - DJANGO_LOG_LEVEL=ERROR
+        - KOKU_LOG_LEVEL=ERROR
         - INITIAL_INGEST_NUM_MONTHS=1
         - PYTHONPATH=/koku/koku
       privileged: true
@@ -338,7 +345,9 @@ services:
         - DATABASE_PASSWORD=${DATABASE_PASSWORD-postgres}
         - RABBITMQ_HOST=${RABBITMQ_HOST-koku-rabbit}
         - RABBITMQ_PORT=5672
-        - LOG_LEVEL=INFO
+        - LOG_LEVEL=ERROR
+        - DJANGO_LOG_LEVEL=ERROR
+        - KOKU_LOG_LEVEL=ERROR
         - DJANGO_SETTINGS_MODULE=koku.settings
         - MASU_SECRET_KEY=abc
         - prometheus_multiproc_dir=/tmp

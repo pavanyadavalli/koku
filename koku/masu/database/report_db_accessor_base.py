@@ -144,6 +144,10 @@ class ReportDBAccessorBase(KokuDBAccess):
             sep (str): The separator in the file. Default: ','
 
         """
+        import time
+
+        LOG.info("Sleeping 20 seconds")
+        time.sleep(20)
         columns = ", ".join(columns)
         with connection.cursor() as cursor:
             cursor.db.set_schema(self.schema)

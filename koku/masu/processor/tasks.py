@@ -28,7 +28,10 @@ from celery import chain
 from celery.utils.log import get_task_logger
 from dateutil import parser
 from django.db import connection
+from django.db import InterfaceError as DjangoInterfaceError
+from django.db import OperationalError
 from django.db import transaction
+from psycopg2 import InterfaceError
 from tenant_schemas.utils import schema_context
 
 import masu.prometheus_stats as worker_stats
@@ -56,8 +59,22 @@ from reporting.models import OCP_MATERIALIZED_VIEWS
 LOG = get_task_logger(__name__)
 
 
+def handle_database_down(func):
+    """Decorator to catch database down exceptions for celery tasks."""
+
+    def wrapper(*args, **kwargs):
+        try:
+            func(*args, **kwargs)
+        except (InterfaceError, DjangoInterfaceError, OperationalError) as err:
+            LOG.error(f"Task failed due to database error: {str(err)}")
+            raise ReportProcessorDBError(err)
+
+    return wrapper
+
+
 # pylint: disable=too-many-locals
 @app.task(name="masu.processor.tasks.get_report_files", queue_name="download", bind=True)
+@handle_database_down
 def get_report_files(
     self, customer_name, authentication, billing_source, provider_type, schema_name, provider_uuid, report_month
 ):
@@ -141,11 +158,14 @@ def get_report_files(
                         "manifest_id": report_dict.get("manifest_id"),
                     }
                     reports_to_summarize.append(report_meta)
-            except (ReportProcessorError, ReportProcessorDBError) as processing_error:
+            except ReportProcessorError as processing_error:
                 worker_stats.PROCESS_REPORT_ERROR_COUNTER.labels(provider_type=provider_type).inc()
                 LOG.error(str(processing_error))
                 WorkerCache().remove_task_from_cache(cache_key)
-                raise processing_error
+            except ReportProcessorDBError as processing_error:
+                connection.close()
+                worker_stats.PROCESS_REPORT_ERROR_COUNTER.labels(provider_type=provider_type).inc()
+                LOG.error(str(processing_error))
 
     WorkerCache().remove_task_from_cache(cache_key)
 

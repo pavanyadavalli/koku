@@ -141,11 +141,13 @@ def get_report_files(
                         "manifest_id": report_dict.get("manifest_id"),
                     }
                     reports_to_summarize.append(report_meta)
-            except (ReportProcessorError, ReportProcessorDBError) as processing_error:
+            except ReportProcessorError as processing_error:
                 worker_stats.PROCESS_REPORT_ERROR_COUNTER.labels(provider_type=provider_type).inc()
                 LOG.error(str(processing_error))
                 WorkerCache().remove_task_from_cache(cache_key)
-                raise processing_error
+            except ReportProcessorDBError as processing_error:
+                worker_stats.PROCESS_REPORT_ERROR_COUNTER.labels(provider_type=provider_type).inc()
+                LOG.error(str(processing_error))
 
     WorkerCache().remove_task_from_cache(cache_key)
 

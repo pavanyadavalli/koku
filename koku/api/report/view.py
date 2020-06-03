@@ -17,6 +17,7 @@
 """View for Reports."""
 import logging
 
+from django.core.cache import caches
 from django.utils.translation import ugettext as _
 from django.views.decorators.vary import vary_on_headers
 from pint.errors import DimensionalityError
@@ -31,8 +32,19 @@ from api.common.pagination import ReportPagination
 from api.common.pagination import ReportRankedPagination
 from api.query_params import QueryParameters
 from api.utils import UnitConverter
+from koku.settings import HOSTNAME
 
 LOG = logging.getLogger(__name__)
+
+cache = caches["hostname"]
+
+
+def get_hostname():
+    """Return hostname from cache."""
+    if cache.get("host") is None:
+        cache.set("host", HOSTNAME)
+        LOG.info(f"Hostname cache filled with: {HOSTNAME}")
+    return cache.get("host")
 
 
 def get_paginator(filter_query_params, count):
@@ -173,4 +185,6 @@ class ReportView(APIView):
         paginator = get_paginator(params.parameters.get("filter", {}), max_rank)
         paginated_result = paginator.paginate_queryset(output, request)
         LOG.debug(f"DATA: {output}")
-        return paginator.get_paginated_response(paginated_result)
+        paginated_response = paginator.get_paginated_response(paginated_result)
+        paginated_response["Hostname"] = get_hostname()
+        return paginated_response

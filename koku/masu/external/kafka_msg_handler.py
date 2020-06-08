@@ -43,7 +43,6 @@ from kafka.errors import KafkaError
 from api.common import log_json
 from masu.config import Config
 from masu.database.report_manifest_db_accessor import ReportManifestDBAccessor
-from masu.database.report_stats_db_accessor import ReportStatsDBAccessor
 from masu.external import UNCOMPRESSED
 from masu.external.accounts_accessor import AccountsAccessor
 from masu.external.accounts_accessor import AccountsAccessorError
@@ -51,6 +50,8 @@ from masu.external.downloader.ocp.ocp_report_downloader import OCPReportDownload
 from masu.processor._tasks.process import _process_report_file
 from masu.processor.report_processor import ReportProcessorDBError
 from masu.processor.report_processor import ReportProcessorError
+from masu.processor.tasks import record_all_manifest_files
+from masu.processor.tasks import record_report_status
 from masu.processor.tasks import summarize_reports
 from masu.prometheus_stats import KAFKA_CONNECTION_ERRORS_COUNTER
 from masu.util.ocp import common as utils
@@ -105,37 +106,6 @@ def create_manifest_entries(report_meta, request_id, context={}):
         request_id=request_id,
     )
     return downloader._prepare_db_manifest_record(report_meta)
-
-
-def record_report_status(manifest_id, file_name, request_id, context={}):
-    """
-    Creates initial report status database entry for new report files.
-
-    If a report has already been downloaded from the ingress service
-    there is a chance that processing has already been complete.  The
-    function returns the last completed date time to determine if the
-    report processing should continue in extract_payload.
-
-    Args:
-        manifest_id (Integer): Manifest Identifier.
-        file_name (String): Report file name
-        request_id (String): Identifier associated with the payload
-        context (Dict): Context for logging (account, etc)
-
-    Returns:
-        DateTime - Last completed date time for a given report file.
-
-    """
-    already_processed = False
-    with ReportStatsDBAccessor(file_name, manifest_id) as db_accessor:
-        already_processed = db_accessor.get_last_completed_datetime()
-        if already_processed:
-            msg = f"Report {file_name} has already been processed."
-            LOG.info(log_json(request_id, msg, context))
-        else:
-            msg = f"Recording stats entry for {file_name}"
-            LOG.info(log_json(request_id, msg, context))
-    return already_processed
 
 
 def get_account_from_cluster_id(cluster_id, request_id, context={}):
@@ -300,6 +270,7 @@ def extract_payload(url, request_id, context={}):  # noqa: C901
         try:
             shutil.copy(payload_source_path, payload_destination_path)
             current_meta["current_file"] = payload_destination_path
+            record_all_manifest_files(report_meta["manifest_id"], report_meta.get("files"))
             if not record_report_status(report_meta["manifest_id"], report_file, request_id, context):
                 msg = f"Successfully extracted OCP for {report_meta.get('cluster_id')}/{usage_month}"
                 LOG.info(log_json(request_id, msg, context))
@@ -447,41 +418,6 @@ def get_account(provider_uuid, request_id, context={}):
     return all_accounts.pop() if all_accounts else None
 
 
-def summarize_manifest(report_meta):
-    """
-    Kick off manifest summary when all report files have completed line item processing.
-
-    Args:
-        report (Dict) - keys: value
-                        schema_name: String,
-                        manifest_id: Integer,
-                        provider_uuid: String,
-                        provider_type: String,
-
-    Returns:
-        Celery Async UUID.
-
-    """
-    async_id = None
-    schema_name = report_meta.get("schema_name")
-    manifest_id = report_meta.get("manifest_id")
-    provider_uuid = report_meta.get("provider_uuid")
-    schema_name = report_meta.get("schema_name")
-    provider_type = report_meta.get("provider_type")
-
-    with ReportManifestDBAccessor() as manifest_accesor:
-        manifest = manifest_accesor.get_manifest_by_id(manifest_id)
-        if manifest.num_processed_files == manifest.num_total_files:
-            report_meta = {
-                "schema_name": schema_name,
-                "provider_type": provider_type,
-                "provider_uuid": provider_uuid,
-                "manifest_id": manifest_id,
-            }
-            async_id = summarize_reports.delay([report_meta])
-    return async_id
-
-
 def process_report(report):
     """
     Process line item report.
@@ -544,6 +480,40 @@ def report_metas_complete(report_metas):
         else:
             process_complete = True
     return process_complete
+
+
+def summarize_manifest(report_meta):
+    """
+    Kick off manifest summary when all report files have completed line item processing.
+
+    Args:
+        report (Dict) - keys: value
+                        schema_name: String,
+                        manifest_id: Integer,
+                        provider_uuid: String,
+                        provider_type: String,
+
+    Returns:
+        Celery Async UUID.
+
+    """
+    async_id = None
+    schema_name = report_meta.get("schema_name")
+    manifest_id = report_meta.get("manifest_id")
+    provider_uuid = report_meta.get("provider_uuid")
+    schema_name = report_meta.get("schema_name")
+    provider_type = report_meta.get("provider_type")
+
+    with ReportManifestDBAccessor() as manifest_accesor:
+        if manifest_accesor.manifest_ready_for_summary(manifest_id):
+            report_meta = {
+                "schema_name": schema_name,
+                "provider_type": provider_type,
+                "provider_uuid": provider_uuid,
+                "manifest_id": manifest_id,
+            }
+            async_id = summarize_reports.delay([report_meta])
+    return async_id
 
 
 async def process_messages(msg, loop=EVENT_LOOP):

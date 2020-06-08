@@ -40,6 +40,7 @@ from masu.external.accounts_accessor import AccountsAccessor
 from masu.external.accounts_accessor import AccountsAccessorError
 from masu.external.date_accessor import DateAccessor
 from masu.processor._tasks.download import _get_report_files
+from masu.processor._tasks.download import _get_report_manifest
 from masu.processor._tasks.process import _process_report_file
 from masu.processor._tasks.remove_expired import _remove_expired_data
 from masu.processor.cost_model_cost_updater import CostModelCostUpdater
@@ -54,9 +55,95 @@ from reporting.models import OCP_MATERIALIZED_VIEWS
 LOG = get_task_logger(__name__)
 
 
+def record_all_manifest_files(manifest_id, report_files):
+    """Store all report file names for manifest ID."""
+    for report in report_files:
+        with ReportStatsDBAccessor(report, manifest_id):
+            LOG.debug(f"Logging {report} for manifest ID: {manifest_id}")
+
+
+def record_report_status(manifest_id, file_name):
+    """
+    Creates initial report status database entry for new report files.
+
+    If a report has already been downloaded from the ingress service
+    there is a chance that processing has already been complete.  The
+    function returns the last completed date time to determine if the
+    report processing should continue in extract_payload.
+
+    Args:
+        manifest_id (Integer): Manifest Identifier.
+        file_name (String): Report file name
+
+    Returns:
+        DateTime - Last completed date time for a given report file.
+
+    """
+    already_processed = False
+    with ReportStatsDBAccessor(file_name, manifest_id) as db_accessor:
+        already_processed = db_accessor.get_last_completed_datetime()
+        if already_processed:
+            LOG.info(f"Report {file_name} has already been processed.")
+        else:
+            LOG.info(f"Recording stats entry for {file_name}")
+    return already_processed
+
+
+@app.task(name="masu.processor.tasks.get_report_manifest", queue_name="download", bind=True)
+def get_report_manifest(
+    self, customer_name, authentication, billing_source, provider_type, schema_name, provider_uuid, report_month
+):
+    month = report_month
+    if isinstance(report_month, str):
+        month = parser.parse(report_month)
+    cache_key = f"{provider_uuid}:{month}"
+
+    manifest = _get_report_manifest(
+        self, customer_name, authentication, billing_source, provider_type, provider_uuid, month, cache_key
+    )
+
+    if manifest:
+        LOG.info("Saving all manifest file names.")
+        record_all_manifest_files(
+            manifest["manifest_id"], [report.get("local_file") for report in manifest.get("files", [])]
+        )
+
+    LOG.info(f"Found Manifests: {str(manifest)}")
+    report_files = manifest.get("files", [])
+    for report_file_dict in report_files:
+        local_file = report_file_dict.get("local_file")
+        report_file = report_file_dict.get("key")
+        if not record_report_status(manifest["manifest_id"], local_file):
+            report_context = manifest.copy()
+            report_context["current_file"] = report_file
+
+            get_report_files.delay(
+                customer_name,
+                authentication,
+                billing_source,
+                provider_type,
+                schema_name,
+                provider_uuid,
+                report_month,
+                report_context,
+            )
+        else:
+            LOG.info(f"{local_file} was already processed")
+    return manifest
+
+
+# pylint: disable=too-many-locals
 @app.task(name="masu.processor.tasks.get_report_files", queue_name="download", bind=True)
 def get_report_files(
-    self, customer_name, authentication, billing_source, provider_type, schema_name, provider_uuid, report_month
+    self,
+    customer_name,
+    authentication,
+    billing_source,
+    provider_type,
+    schema_name,
+    provider_uuid,
+    report_month,
+    report_context,
 ):
     """
     Task to download a Report and process the report.
@@ -83,8 +170,16 @@ def get_report_files(
         month = parser.parse(report_month)
 
     cache_key = f"{provider_uuid}:{month}"
-    reports = _get_report_files(
-        self, customer_name, authentication, billing_source, provider_type, provider_uuid, month, cache_key
+    report_dict = _get_report_files(
+        self,
+        customer_name,
+        authentication,
+        billing_source,
+        provider_type,
+        provider_uuid,
+        month,
+        cache_key,
+        report_context,
     )
 
     stmt = (
@@ -93,60 +188,60 @@ def get_report_files(
         f" provider: {provider_type}\n"
         f" provider_uuid: {provider_uuid}\n"
     )
-    for report in reports:
-        stmt += " file: " + str(report["file"]) + "\n"
-    LOG.info(stmt[:-1])
-    reports_to_summarize = []
-    for report_dict in reports:
-        with transaction.atomic():
-            try:
-                manifest_id = report_dict.get("manifest_id")
-                file_name = os.path.basename(report_dict.get("file"))
-                with ReportStatsDBAccessor(file_name, manifest_id) as stats:
-                    started_date = stats.get_last_started_datetime()
-                    completed_date = stats.get_last_completed_datetime()
+    if report_dict:
+        stmt += " file: " + str(report_dict["file"]) + "\n"
+        LOG.info(stmt[:-1])
+    else:
+        return None
 
-                # Skip processing if already in progress.
-                if started_date and not completed_date:
-                    expired_start_date = started_date + datetime.timedelta(
-                        hours=Config.REPORT_PROCESSING_TIMEOUT_HOURS
+    with transaction.atomic():
+        try:
+            manifest_id = report_dict.get("manifest_id")
+            file_name = os.path.basename(report_dict.get("file"))
+            with ReportStatsDBAccessor(file_name, manifest_id) as stats:
+                started_date = stats.get_last_started_datetime()
+                completed_date = stats.get_last_completed_datetime()
+
+            # Skip processing if already in progress.
+            if started_date and not completed_date:
+                expired_start_date = started_date + datetime.timedelta(hours=Config.REPORT_PROCESSING_TIMEOUT_HOURS)
+                if DateAccessor().today_with_timezone("UTC") < expired_start_date:
+                    LOG.info(
+                        "Skipping processing task for %s since it was started at: %s.", file_name, str(started_date)
                     )
-                    if DateAccessor().today_with_timezone("UTC") < expired_start_date:
-                        LOG.info(
-                            "Skipping processing task for %s since it was started at: %s.",
-                            file_name,
-                            str(started_date),
-                        )
-                        continue
+                    return None
 
-                stmt = (
-                    f"Processing starting:\n"
-                    f" schema_name: {customer_name}\n"
-                    f" provider: {provider_type}\n"
-                    f" provider_uuid: {provider_uuid}\n"
-                    f' file: {report_dict.get("file")}'
-                )
-                LOG.info(stmt)
-                worker_stats.PROCESS_REPORT_ATTEMPTS_COUNTER.labels(provider_type=provider_type).inc()
-                _process_report_file(schema_name, provider_type, provider_uuid, report_dict)
-                known_manifest_ids = [report.get("manifest_id") for report in reports_to_summarize]
-                if report_dict.get("manifest_id") not in known_manifest_ids:
-                    report_meta = {
-                        "schema_name": schema_name,
-                        "provider_type": provider_type,
-                        "provider_uuid": provider_uuid,
-                        "manifest_id": report_dict.get("manifest_id"),
-                    }
-                    reports_to_summarize.append(report_meta)
-            except (ReportProcessorError, ReportProcessorDBError) as processing_error:
-                worker_stats.PROCESS_REPORT_ERROR_COUNTER.labels(provider_type=provider_type).inc()
-                LOG.error(str(processing_error))
-                WorkerCache().remove_task_from_cache(cache_key)
-                raise processing_error
+            stmt = (
+                f"Processing starting:\n"
+                f" schema_name: {customer_name}\n"
+                f" provider: {provider_type}\n"
+                f" provider_uuid: {provider_uuid}\n"
+                f' file: {report_dict.get("file")}'
+            )
+            LOG.info(stmt)
+            worker_stats.PROCESS_REPORT_ATTEMPTS_COUNTER.labels(provider_type=provider_type).inc()
+            _process_report_file(schema_name, provider_type, provider_uuid, report_dict)
+
+            report_meta = {
+                "schema_name": schema_name,
+                "provider_type": provider_type,
+                "provider_uuid": provider_uuid,
+                "manifest_id": report_dict.get("manifest_id"),
+            }
+
+        except (ReportProcessorError, ReportProcessorDBError) as processing_error:
+            worker_stats.PROCESS_REPORT_ERROR_COUNTER.labels(provider_type=provider_type).inc()
+            LOG.error(str(processing_error))
+            WorkerCache().remove_task_from_cache(cache_key)
+            raise processing_error
 
     WorkerCache().remove_task_from_cache(cache_key)
 
-    return reports_to_summarize
+    with ReportManifestDBAccessor() as manifest_accesor:
+        if manifest_accesor.manifest_ready_for_summary(manifest_id) and report_meta:
+            async_id = summarize_reports.delay([report_meta])
+            LOG.info(f"Check for summary celery ID: {async_id}")
+    return report_meta
 
 
 @app.task(name="masu.processor.tasks.remove_expired_data", queue_name="remove_expired")

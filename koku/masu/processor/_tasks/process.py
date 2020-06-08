@@ -75,14 +75,14 @@ def _process_report_file(schema_name, provider, provider_uuid, report_dict):
     )
 
     processor.process()
+
     with ReportStatsDBAccessor(file_name, manifest_id) as stats_recorder:
         stats_recorder.log_last_completed_datetime()
 
     with ReportManifestDBAccessor() as manifest_accesor:
         manifest = manifest_accesor.get_manifest_by_id(manifest_id)
         if manifest:
-            manifest.num_processed_files += 1
-            manifest.save()
+            ReportManifestDBAccessor.increment_file_process_count(manifest_id)
             manifest_accesor.mark_manifest_as_updated(manifest)
         else:
             LOG.error("Unable to find manifest for ID: %s, file %s", manifest_id, file_name)

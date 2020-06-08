@@ -18,6 +18,7 @@
 import logging
 
 from django.core.cache import caches
+from django.utils.decorators import method_decorator
 from django.utils.translation import ugettext as _
 from django.views.decorators.vary import vary_on_headers
 from pint.errors import DimensionalityError
@@ -27,7 +28,7 @@ from rest_framework.response import Response
 from rest_framework.serializers import ValidationError
 from rest_framework.views import APIView
 
-from api.common import RH_IDENTITY_HEADER
+from api.common import CACHE_RH_IDENTITY_HEADER
 from api.common.pagination import ReportPagination
 from api.common.pagination import ReportRankedPagination
 from api.query_params import QueryParameters
@@ -147,7 +148,7 @@ class ReportView(APIView):
     It providers one GET endpoint for the reports.
     """
 
-    @vary_on_headers(RH_IDENTITY_HEADER)
+    @method_decorator(vary_on_headers(CACHE_RH_IDENTITY_HEADER))
     def get(self, request, **kwargs):
         """Get Report Data.
 

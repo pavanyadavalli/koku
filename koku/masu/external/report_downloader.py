@@ -51,6 +51,8 @@ class ReportDownloader:
         provider_uuid,
         cache_key,
         report_name=None,
+        account=None,
+        request_id="no_request_id",
     ):
         """Set the downloader based on the backend cloud provider."""
         self.task = task
@@ -61,6 +63,12 @@ class ReportDownloader:
         self.provider_type = provider_type
         self.provider_uuid = provider_uuid
         self.cache_key = cache_key
+        self.request_id = request_id
+        self.account = account
+        if self.account is None:
+            self.account = customer_name[4:]
+        self.context = {"request_id": self.request_id, "provider_uuid": self.provider_uuid, "account": self.account}
+
         try:
             self._downloader = self._set_downloader()
         except Exception as err:
@@ -91,6 +99,8 @@ class ReportDownloader:
                 report_name=self.report_name,
                 provider_uuid=self.provider_uuid,
                 cache_key=self.cache_key,
+                request_id=self.request_id,
+                account=self.account,
             )
         if self.provider_type == Provider.PROVIDER_AWS_LOCAL:
             return AWSLocalReportDownloader(
@@ -101,6 +111,8 @@ class ReportDownloader:
                 report_name=self.report_name,
                 provider_uuid=self.provider_uuid,
                 cache_key=self.cache_key,
+                request_id=self.request_id,
+                account=self.account,
             )
         if self.provider_type == Provider.PROVIDER_AZURE:
             return AzureReportDownloader(
@@ -111,6 +123,8 @@ class ReportDownloader:
                 report_name=self.report_name,
                 provider_uuid=self.provider_uuid,
                 cache_key=self.cache_key,
+                request_id=self.request_id,
+                account=self.account,
             )
         if self.provider_type == Provider.PROVIDER_AZURE_LOCAL:
             return AzureLocalReportDownloader(
@@ -121,6 +135,8 @@ class ReportDownloader:
                 report_name=self.report_name,
                 provider_uuid=self.provider_uuid,
                 cache_key=self.cache_key,
+                request_id=self.request_id,
+                account=self.account,
             )
         if self.provider_type == Provider.PROVIDER_OCP:
             return OCPReportDownloader(
@@ -131,6 +147,8 @@ class ReportDownloader:
                 report_name=self.report_name,
                 provider_uuid=self.provider_uuid,
                 cache_key=self.cache_key,
+                request_id=self.request_id,
+                account=self.account,
             )
         if self.provider_type == Provider.PROVIDER_GCP:
             return GCPReportDownloader(
@@ -141,6 +159,8 @@ class ReportDownloader:
                 report_name=self.report_name,
                 provider_uuid=self.provider_uuid,
                 cache_key=self.cache_key,
+                request_id=self.request_id,
+                account=self.account,
             )
         return None
 

@@ -19,6 +19,7 @@ import logging
 
 from dateutil.relativedelta import relativedelta
 
+from api.common import log_json
 from api.models import Provider
 from masu.database.report_stats_db_accessor import ReportStatsDBAccessor
 from masu.external.date_accessor import DateAccessor

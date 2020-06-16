@@ -28,7 +28,7 @@ from api.models import Provider
 from api.report.provider_map import ProviderMap
 from koku.database import KeyDecimalTransform
 from providers.provider_access import ProviderAccessor
-from reporting.models import OCPUsageLineItemDailySummary
+from reporting.models import OCPUsageLineItemDailySummaryPartitioned
 from reporting.provider.ocp.models import OCPCostSummary
 from reporting.provider.ocp.models import OCPCostSummaryByNode
 from reporting.provider.ocp.models import OCPCostSummaryByProject
@@ -66,7 +66,7 @@ class OCPProviderMap(ProviderMap):
                 "tag_column": "pod_labels",
                 "report_type": {
                     "costs": {
-                        "tables": {"query": OCPUsageLineItemDailySummary},
+                        "tables": {"query": OCPUsageLineItemDailySummaryPartitioned},
                         "aggregates": {
                             "sup_raw": Sum(Value(0, output_field=DecimalField())),
                             "sup_usage": Sum(
@@ -383,7 +383,7 @@ class OCPProviderMap(ProviderMap):
                         "sum_columns": ["cost_total", "infra_total", "sup_total"],
                     },
                     "costs_by_project": {
-                        "tables": {"query": OCPUsageLineItemDailySummary},
+                        "tables": {"query": OCPUsageLineItemDailySummaryPartitioned},
                         "aggregates": {
                             "sup_raw": Sum(Value(0, output_field=DecimalField())),
                             "sup_usage": Sum(
@@ -1220,7 +1220,7 @@ class OCPProviderMap(ProviderMap):
                     "tags": {"default_ordering": {"cost_total": "desc"}},
                 },
                 "start_date": "usage_start",
-                "tables": {"query": OCPUsageLineItemDailySummary},
+                "tables": {"query": OCPUsageLineItemDailySummaryPartitioned},
             }
         ]
 

@@ -91,6 +91,7 @@ from reporting.provider.ocp.models import OCPStorageVolumeLabelSummary
 from reporting.provider.ocp.models import OCPUsageLineItem
 from reporting.provider.ocp.models import OCPUsageLineItemDaily
 from reporting.provider.ocp.models import OCPUsageLineItemDailySummary
+from reporting.provider.ocp.models import OCPUsageLineItemDailySummaryPartitioned
 from reporting.provider.ocp.models import OCPUsagePodLabelSummary
 from reporting.provider.ocp.models import OCPUsageReport
 from reporting.provider.ocp.models import OCPUsageReportPeriod

@@ -76,7 +76,7 @@ WHERE usage_start >= {{start_date}}
 ;
 
 -- Populate the daily aggregate line item data
-INSERT INTO {{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary (
+INSERT INTO {{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary_partitioned (
     report_period_id,
     cluster_id,
     cluster_alias,

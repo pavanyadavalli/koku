@@ -302,6 +302,122 @@ class OCPUsageLineItemDailySummary(models.Model):
     source_uuid = models.UUIDField(unique=False, null=True)
 
 
+class OCPUsageLineItemDailySummaryPartitioned(models.Model):
+    """A daily aggregation of line items from pod and volume sources.
+
+    This table is aggregated by OCP resource.
+
+    """
+
+    MONTHLY_COST_TYPES = (("Node", "Node"), ("Cluster", "Cluster"))
+    MONTHLY_COST_RATE_MAP = {"Node": "node_cost_per_month", "Cluster": "cluster_cost_per_month"}
+
+    class Meta:
+        """Meta for OCPUsageLineItemDailySummary."""
+
+        db_table = "reporting_ocpusagelineitem_daily_summary_partitioned"
+        managed = False
+
+        indexes = [
+            models.Index(fields=["usage_start"], name="summary_ocp_usage_idx"),
+            models.Index(fields=["namespace"], name="summary_namespace_idx", opclasses=["varchar_pattern_ops"]),
+            models.Index(fields=["node"], name="summary_node_idx", opclasses=["varchar_pattern_ops"]),
+            models.Index(fields=["data_source"], name="summary_data_source_idx"),
+            GinIndex(fields=["pod_labels"], name="pod_labels_idx"),
+        ]
+
+    report_period = models.ForeignKey("OCPUsageReportPeriod", on_delete=models.CASCADE, null=True)
+
+    cluster_id = models.CharField(max_length=50, null=True)
+
+    cluster_alias = models.CharField(max_length=256, null=True)
+
+    # Whether the data comes from a pod or volume report
+    data_source = models.CharField(max_length=64, null=True)
+
+    # Kubernetes objects by convention have a max name length of 253 chars
+    namespace = models.CharField(max_length=253, null=True)
+
+    node = models.CharField(max_length=253, null=True)
+
+    # Another node identifier used to tie the node to an EC2 instance
+    resource_id = models.CharField(max_length=253, null=True)
+
+    usage_start = models.DateField(null=False)
+    usage_end = models.DateField(null=False)
+
+    pod_labels = JSONField(null=True)
+
+    pod_usage_cpu_core_hours = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    pod_request_cpu_core_hours = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    pod_limit_cpu_core_hours = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    pod_usage_memory_gigabyte_hours = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    pod_request_memory_gigabyte_hours = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    pod_limit_memory_gigabyte_hours = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    node_capacity_cpu_cores = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    node_capacity_cpu_core_hours = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    node_capacity_memory_gigabytes = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    node_capacity_memory_gigabyte_hours = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    cluster_capacity_cpu_core_hours = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    cluster_capacity_memory_gigabyte_hours = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    # Total capacity represents the sum of all of the customers clusters
+    total_capacity_cpu_core_hours = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    total_capacity_memory_gigabyte_hours = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    # Volume specific fields
+    persistentvolumeclaim = models.CharField(max_length=253, null=True)
+
+    persistentvolume = models.CharField(max_length=253, null=True)
+
+    storageclass = models.CharField(max_length=50, null=True)
+
+    volume_labels = JSONField(null=True)
+
+    persistentvolumeclaim_capacity_gigabyte = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    persistentvolumeclaim_capacity_gigabyte_months = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    volume_request_storage_gigabyte_months = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    persistentvolumeclaim_usage_gigabyte_months = models.DecimalField(max_digits=27, decimal_places=9, null=True)
+
+    # Cost fields
+
+    # Infrastructure raw cost comes from a Cloud Provider
+    infrastructure_raw_cost = models.DecimalField(max_digits=33, decimal_places=15, null=True)
+
+    infrastructure_project_raw_cost = models.DecimalField(max_digits=33, decimal_places=15, null=True)
+
+    infrastructure_usage_cost = JSONField(null=True)
+
+    infrastructure_markup_cost = models.DecimalField(max_digits=33, decimal_places=15, null=True)
+
+    infrastructure_project_markup_cost = models.DecimalField(max_digits=33, decimal_places=15, null=True)
+
+    infrastructure_monthly_cost = models.DecimalField(max_digits=33, decimal_places=15, null=True)
+
+    supplementary_usage_cost = JSONField(null=True)
+
+    supplementary_monthly_cost = models.DecimalField(max_digits=33, decimal_places=15, null=True)
+
+    monthly_cost_type = models.TextField(null=True, choices=MONTHLY_COST_TYPES)
+
+    source_uuid = models.UUIDField(unique=False, null=True)
+
+
 class OCPUsagePodLabelSummary(models.Model):
     """A collection of all current existing tag key and values."""
 

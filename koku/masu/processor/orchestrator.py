@@ -108,6 +108,13 @@ class Orchestrator:
 
         return DateAccessor().get_billing_months(number_of_months)
 
+    def provider_exists(self, provider_uuid):
+        """Verify provider exists."""
+        provider_exists = False
+        with ProviderDBAccessor(provider_uuid=provider_uuid) as provider_accessor:
+            provider_exists = True if provider_accessor.get_provider() else False
+        return provider_exists
+
     def prepare(self):
         """
         Prepare a processing request for each account.
@@ -126,6 +133,8 @@ class Orchestrator:
         async_result = None
         for account in self._polling_accounts:
             provider_uuid = account.get("provider_uuid")
+            if not self.provider_exists(provider_uuid):
+                continue
             report_months = self.get_reports(provider_uuid)
             for month in report_months:
                 provider_status = ProviderStatus(provider_uuid)

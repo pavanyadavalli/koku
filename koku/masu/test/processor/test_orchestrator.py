@@ -17,6 +17,7 @@
 """Test the Orchestrator object."""
 import logging
 import random
+import uuid
 from unittest.mock import patch
 
 import faker
@@ -210,6 +211,15 @@ class OrchestratorTest(MasuTestCase):
         orchestrator.prepare()
         mock_task.assert_not_called()
 
+    @patch("masu.processor.orchestrator.get_report_files.apply_async", return_value=True)
+    def test_processing_not_started_with_no_providers(self, mock_task):
+        """Test that processing tasks are not executed when provider is missing."""
+        Provider.objects.all().delete()
+
+        orchestrator = Orchestrator()
+        orchestrator.prepare()
+        mock_task.assert_not_called()
+
     @patch("masu.processor.orchestrator.ProviderStatus", spec=True)
     @patch("masu.processor.orchestrator.get_report_files.apply_async", return_value=True)
     def test_prepare_w_status_backoff(self, mock_task, mock_accessor):
@@ -243,3 +253,9 @@ class OrchestratorTest(MasuTestCase):
 
         Config.INGEST_OVERRIDE = False
         Config.INITIAL_INGEST_NUM_MONTHS = initial_month_qty
+
+    def test_provider_exists(self):
+        """Test the provider_exists helper method."""
+        orchestrator = Orchestrator()
+        self.assertTrue(orchestrator.provider_exists(self.aws_provider_uuid))
+        self.assertFalse(orchestrator.provider_exists(uuid.uuid4()))

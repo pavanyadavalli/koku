@@ -305,10 +305,6 @@ def sources_network_info(source_id, auth_header):
         LOG.warning(f"Unable to find endpoint for Source ID: {source_id}")
         return
 
-    if source_type_name != SOURCES_OCP_SOURCE_NAME:
-        app_settings = sources_network.get_application_settings()
-        storage.update_application_settings(source_id, app_settings)
-
     source_type = SOURCE_PROVIDER_MAP.get(source_type_name)
     if not source_type:
         LOG.warning(f"Unexpected source type ID: {source_type_id}")
@@ -316,6 +312,13 @@ def sources_network_info(source_id, auth_header):
 
     storage.add_provider_sources_network_info(source_id, source_uuid, source_name, source_type, endpoint_id)
     save_auth_info(auth_header, source_id)
+    if source_type_name != SOURCES_OCP_SOURCE_NAME:
+        app_settings = sources_network.get_application_settings()
+        try:
+            storage.update_application_settings(source_id, app_settings)
+        except storage.SourcesStorageError as error:
+            LOG.error(f"Unable to apply application settings. error: {str(error)}")
+            return
 
 
 def cost_mgmt_msg_filter(msg_data):

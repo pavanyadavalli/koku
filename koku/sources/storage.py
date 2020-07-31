@@ -16,6 +16,7 @@
 #
 """Database accessors for Sources database table."""
 import binascii
+import copy
 import logging
 from base64 import b64decode
 from json import loads as json_loads
@@ -31,6 +32,13 @@ from api.provider.models import Sources
 LOG = logging.getLogger(__name__)
 REQUIRED_AZURE_AUTH_KEYS = {"client_id", "tenant_id", "client_secret", "subscription_id"}
 REQUIRED_AZURE_BILLING_KEYS = {"resource_group", "storage_account"}
+ALLOWED_BILLING_SOURCE_PROVIDERS = (
+    Provider.PROVIDER_AWS,
+    Provider.PROVIDER_AWS_LOCAL,
+    Provider.PROVIDER_AZURE,
+    Provider.PROVIDER_AZURE_LOCAL,
+)
+ALLOWED_AUTHENTICATION_PROVIDERS = (Provider.PROVIDER_AZURE, Provider.PROVIDER_AZURE_LOCAL)
 
 
 class SourcesStorageError(Exception):
@@ -397,21 +405,6 @@ def add_provider_sources_network_info(source_id, source_uuid, name, source_type,
             source.save()
 
 
-def _validate_billing_source(provider_type, billing_source):
-    """Validate billing source parameters."""
-    if provider_type == Provider.PROVIDER_AWS:
-        if not billing_source.get("bucket"):
-            raise SourcesStorageError("Missing AWS bucket.")
-    elif provider_type == Provider.PROVIDER_AZURE:
-        data_source = billing_source.get("data_source")
-        if not data_source:
-            raise SourcesStorageError("Missing AZURE data_source.")
-        if not data_source.get("resource_group"):
-            raise SourcesStorageError("Missing AZURE resource_group")
-        if not data_source.get("storage_account"):
-            raise SourcesStorageError("Missing AZURE storage_account")
-
-
 def add_provider_koku_uuid(source_id, koku_uuid):
     """
     Add Koku provider UUID to Sources database object.
@@ -452,16 +445,59 @@ def is_known_source(source_id):
     return source_exists
 
 
+def _validate_billing_source(provider_type, billing_source):
+    """Validate billing source parameters."""
+    if provider_type == Provider.PROVIDER_AWS:
+        if not billing_source.get("bucket"):
+            raise SourcesStorageError("Missing AWS bucket.")
+    elif provider_type == Provider.PROVIDER_AZURE:
+        data_source = billing_source.get("data_source")
+        if not data_source:
+            raise SourcesStorageError("Missing AZURE data_source.")
+        if not data_source.get("resource_group"):
+            raise SourcesStorageError("Missing AZURE resource_group")
+        if not data_source.get("storage_account"):
+            raise SourcesStorageError("Missing AZURE storage_account")
+
+
+def _update_billing_source(instance, billing_source):
+    if instance.source_type not in ALLOWED_BILLING_SOURCE_PROVIDERS:
+        raise SourcesStorageError(f"Option not supported by source type {instance.source_type}.")
+    if instance.billing_source.get("data_source"):
+        billing_copy = copy.deepcopy(instance.billing_source.get("data_source"))
+        data_source = billing_source.get("data_source", {})
+        if data_source.get("resource_group") or data_source.get("storage_account"):
+            billing_copy.update(billing_source.get("data_source"))
+            billing_source["data_source"] = billing_copy
+    _validate_billing_source(instance.source_type, billing_source)
+    return billing_source
+
+
+def _update_authentication(instance, authentication):
+    if instance.source_type not in ALLOWED_AUTHENTICATION_PROVIDERS:
+        raise SourcesStorageError(f"Option not supported by source type {instance.source_type}.")
+    auth_dict = instance.authentication
+    if not auth_dict.get("credentials"):
+        auth_dict["credentials"] = {"subscription_id": None}
+    subscription_id = authentication.get("credentials", {}).get("subscription_id")
+    auth_dict["credentials"]["subscription_id"] = subscription_id
+    return auth_dict
+
+
 def update_application_settings(source_id, settings):
     """Store billing source update."""
     billing_source = settings.get("billing_source")
     authentication = settings.get("authentication")
     if billing_source:
         instance = get_source(source_id, "Unable to add billing source", LOG.error)
+        if instance.billing_source:
+            billing_source = _update_billing_source(instance, billing_source)
         instance.billing_source = billing_source
         instance.save()
 
     if authentication:
         instance = get_source(source_id, "Unable to add authentication", LOG.error)
+        if instance.authentication:
+            authentication = _update_authentication(instance, authentication)
         instance.authentication = authentication
         instance.save()

@@ -450,3 +450,18 @@ def is_known_source(source_id):
         LOG.error(f"Accessing Sources resulting in {type(error).__name__}: {error}")
         raise error
     return source_exists
+
+
+def update_application_settings(source_id, settings):
+    """Store billing source update."""
+    billing_source = settings.get("billing_source")
+    authentication = settings.get("authentication")
+    if billing_source:
+        instance = get_source(source_id, "Unable to add billing source", LOG.error)
+        instance.billing_source = billing_source
+        instance.save()
+
+    if authentication:
+        instance = get_source(source_id, "Unable to add authentication", LOG.error)
+        instance.authentication = authentication
+        instance.save()

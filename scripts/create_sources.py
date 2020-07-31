@@ -19,6 +19,7 @@ SOURCES_API_HOST = os.getenv("SOURCES_API_HOST", "localhost")
 SOURCES_API_PORT = os.getenv("SOURCES_API_PORT", "3000")
 SOURCES_API_URL = f"http://{SOURCES_API_HOST}:{SOURCES_API_PORT}"
 SOURCES_API_PREFIX = os.getenv("SOURCES_API_PREFIX", "/api/v1.0")
+SOURCES_API_V3_PREFIX = os.getenv("SOURCES_API_PREFIX", "/api/v3.0")
 SOURCES_INTERNAL_API_PREFIX = os.getenv("SOURCES_INTERNAL_API_PREFIX", "/internal/v1.0")
 
 
@@ -68,34 +69,26 @@ class SourcesClientDataGenerator:
         header = {"x-rh-identity": auth_header}
         self._identity_header = header
 
-    def create_s3_bucket(self, parameters, billing_source):
+    def create_s3_bucket(self, billing_source):
         json_data = {"billing_source": {"bucket": billing_source}}
+        return json_data
 
-        url = "{}/{}/".format(self._base_url, parameters.get("source_id"))
-        response = requests.patch(url, headers=self._identity_header, json=json_data)
-        return response
-
-    def create_azure_storage(self, parameters, resource_group, storage_account):
+    def create_azure_storage(self, resource_group, storage_account):
         json_data = {
             "billing_source": {"data_source": {"resource_group": resource_group, "storage_account": storage_account}}
         }
+        return json_data
 
-        url = "{}/{}/".format(self._base_url, parameters.get("source_id"))
-        response = requests.patch(url, headers=self._identity_header, json=json_data)
-        return response
-
-    def create_azure_subscription_id(self, parameters, subscription_id):
+    def create_azure_subscription_id(self, subscription_id):
         json_data = {"authentication": {"credentials": {"subscription_id": subscription_id}}}
-
-        url = "{}/{}/".format(self._base_url, parameters.get("source_id"))
-        response = requests.patch(url, headers=self._identity_header, json=json_data)
-        return response
+        return json_data
 
 
 class SourcesDataGenerator:
     def __init__(self, auth_header):
         self._sources_host = SOURCES_API_URL
         self._base_url = f"{self._sources_host}{SOURCES_API_PREFIX}"
+        self._base_v3_url = f"{self._sources_host}{SOURCES_API_V3_PREFIX}"
 
         header = {"x-rh-identity": auth_header}
         self._identity_header = header
@@ -180,13 +173,14 @@ class SourcesDataGenerator:
         response = r.json()
         return response.get("id")
 
-    def create_application(self, source_id, source_type):
+    def create_application(self, source_id, source_type, app_settings=None):
         json_data = {
             "source_id": str(source_id),
             "application_type_id": str(self._application_type_map.get(source_type)),
         }
-
-        url = "{}/{}".format(self._base_url, "applications")
+        if app_settings:
+            json_data["settings"] = app_settings
+        url = "{}/{}".format(self._base_v3_url, "applications")
         r = requests.post(url, headers=self._identity_header, json=json_data)
         response = r.json()
         return response.get("id")
@@ -211,13 +205,6 @@ def main(args):  # noqa
     if parameters.get("aws"):
         role_arn = parameters.get("role_arn")
         s3_bucket = parameters.get("s3_bucket")
-        source_id_param = parameters.get("source_id")
-
-        if s3_bucket and source_id_param:
-            sources_client = SourcesClientDataGenerator(identity_header)
-            billing_source_response = sources_client.create_s3_bucket(parameters, s3_bucket)
-            print(f"Associating S3 bucket: {billing_source_response.content}")
-            return
 
         source_id = generator.create_source(name, "amazon")
         print(f"Creating AWS Source. Source ID: {source_id}")
@@ -230,7 +217,14 @@ def main(args):  # noqa
         )
 
         if create_application:
-            application_id = generator.create_application(source_id, "/insights/platform/cost-management")
+            sources_client = SourcesClientDataGenerator(identity_header)
+            billing_source = sources_client.create_s3_bucket(s3_bucket)
+            app_settings = {}
+            if billing_source:
+                app_settings.update(billing_source)
+            application_id = generator.create_application(
+                source_id, "/insights/platform/cost-management", app_settings
+            )
             print(f"Attached Cost Management Application ID {application_id} to Source ID {source_id}")
 
     elif parameters.get("ocp"):
@@ -247,19 +241,16 @@ def main(args):  # noqa
         storage_account = parameters.get("storage_account")
         resource_group = parameters.get("resource_group")
         subscription_id = parameters.get("subscription_id")
-        source_id_param = parameters.get("source_id")
 
-        if storage_account and resource_group and source_id_param:
+        azure_billing_source = None
+        if storage_account and resource_group:
             sources_client = SourcesClientDataGenerator(identity_header)
-            billing_source_response = sources_client.create_azure_storage(parameters, resource_group, storage_account)
-            print(f"Associating Azure storage account and resource group: {billing_source_response.content}")
-            return
+            azure_billing_source = sources_client.create_azure_storage(resource_group, storage_account)
 
-        if subscription_id and source_id_param:
+        azure_authentication = None
+        if subscription_id:
             sources_client = SourcesClientDataGenerator(identity_header)
-            authentication_response = sources_client.create_azure_subscription_id(parameters, subscription_id)
-            print(f"Associating Azure Subscription ID: {authentication_response.content}")
-            return
+            azure_authentication = sources_client.create_azure_subscription_id(subscription_id)
 
         source_id = generator.create_source(name, "azure")
         print(f"Creating AZURE Source. Source ID: {source_id}")
@@ -273,8 +264,16 @@ def main(args):  # noqa
             f"Azure Source Setup Successfully\n\tSource ID: {source_id}\n\tEndpoint ID: {endpoint_id}\n\tAuthentication ID: {authentication_id}"  # noqa
         )
 
+        app_settings = {}
+        if azure_billing_source:
+            app_settings.update(azure_billing_source)
+        if azure_authentication:
+            app_settings.update(azure_authentication)
+
         if create_application:
-            application_id = generator.create_application(source_id, "/insights/platform/cost-management")
+            application_id = generator.create_application(
+                source_id, "/insights/platform/cost-management", app_settings
+            )
             print(f"Attached Cost Management Application ID {application_id} to Source ID {source_id}")
 
 

@@ -302,6 +302,7 @@ def sources_network_info(source_id, auth_header):
     source_uuid = source_details.get("uid")
     source_type_name = sources_network.get_source_type_name(source_type_id)
     endpoint_id = sources_network.get_endpoint_id()
+    app_settings = sources_network.get_application_settings()
 
     if not endpoint_id and source_type_name != SOURCES_OCP_SOURCE_NAME:
         LOG.warning(f"Unable to find endpoint for Source ID: {source_id}")
@@ -313,6 +314,7 @@ def sources_network_info(source_id, auth_header):
         return
 
     storage.add_provider_sources_network_info(source_id, source_uuid, source_name, source_type, endpoint_id)
+    storage.update_application_settings(source_id, app_settings)
     save_auth_info(auth_header, source_id)
 
 

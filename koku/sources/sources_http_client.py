@@ -52,6 +52,7 @@ class SourcesHTTPClient:
         self._source_id = source_id
         self._sources_host = Config.SOURCES_API_URL
         self._base_url = f"{self._sources_host}{Config.SOURCES_API_PREFIX}"
+        self._base_v3_url = f"{self._sources_host}{Config.SOURCES_API_V3_PREFIX}"
         self._internal_url = f"{self._sources_host}{Config.SOURCES_INTERNAL_API_PREFIX}"
 
         header = {"x-rh-identity": auth_header}
@@ -157,6 +158,16 @@ class SourcesHTTPClient:
         endpoint_response = r.json()
         source_name = endpoint_response.get("data")[0].get("name")
         return source_name
+
+    def get_application_settings(self):
+        """Get the application settings from Sources."""
+        application_url = "{}/applications?filter[source_id]={}".format(self._base_url, str(self._source_id))
+        r = self._get_network_response(application_url, self._identity_header, "Unable to get S3 bucket")
+        applications_response = r.json()
+        if not applications_response.get("data"):
+            raise SourcesHTTPClientError(f"No application data for source: {self._source_id}")
+        aws_settings = applications_response.get("data")[0].get("settings")
+        return aws_settings
 
     def get_aws_role_arn(self):
         """Get the roleARN from Sources Authentication service."""

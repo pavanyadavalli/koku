@@ -32,6 +32,7 @@ class Config:
     SOURCES_API_PORT = os.getenv("SOURCES_API_PORT", "3000")
     SOURCES_API_URL = f"http://{SOURCES_API_HOST}:{SOURCES_API_PORT}"
     SOURCES_API_PREFIX = os.getenv("SOURCES_API_PREFIX", "/api/v1.0")
+    SOURCES_API_V3_PREFIX = os.getenv("SOURCES_API_PREFIX", "/api/v3.0")
     SOURCES_INTERNAL_API_PREFIX = os.getenv("SOURCES_INTERNAL_API_PREFIX", "/internal/v1.0")
     SOURCES_FAKE_HEADER = os.getenv(
         "SOURCES_FAKE_HEADER",

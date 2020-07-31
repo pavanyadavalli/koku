@@ -545,6 +545,11 @@ class SourcesKafkaMsgHandlerTest(TestCase):
                 json={"data": [{"id": authentication_id}]},
             )
             m.get(
+                f"http://www.sources.com/api/v1.0/applications?filter[source_id]={test_source_id}",
+                status_code=200,
+                json={"data": [{"settings": {}}]},
+            )
+            m.get(
                 (
                     f"http://www.sources.com/internal/v1.0/authentications/{authentication_id}"
                     f"?expose_encrypted_attribute[]=password"
@@ -600,6 +605,11 @@ class SourcesKafkaMsgHandlerTest(TestCase):
                 ),
                 status_code=200,
                 json={"data": [{"id": authentication_id}]},
+            )
+            m.get(
+                f"http://www.sources.com/api/v1.0/applications?filter[source_id]={test_source_id}",
+                status_code=200,
+                json={"data": [{"settings": {}}]},
             )
             m.get(
                 (
@@ -718,6 +728,11 @@ class SourcesKafkaMsgHandlerTest(TestCase):
                 json={"data": [authentications_response]},
             )
             m.get(
+                f"http://www.sources.com/api/v1.0/applications?filter[source_id]={test_source_id}",
+                status_code=200,
+                json={"data": [{"settings": {}}]},
+            )
+            m.get(
                 (
                     f"http://www.sources.com/internal/v1.0/authentications/{authentication_id}"
                     f"?expose_encrypted_attribute[]=password"
@@ -785,6 +800,11 @@ class SourcesKafkaMsgHandlerTest(TestCase):
                 json={"data": [authentications_response]},
             )
             m.get(
+                f"http://www.sources.com/api/v1.0/applications?filter[source_id]={test_source_id}",
+                status_code=200,
+                json={"data": [{"settings": {}}]},
+            )
+            m.get(
                 (
                     f"http://www.sources.com/internal/v1.0/authentications/{authentication_id}"
                     f"?expose_encrypted_attribute[]=password"
@@ -838,6 +858,11 @@ class SourcesKafkaMsgHandlerTest(TestCase):
                 f"http://www.sources.com/api/v1.0/source_types?filter[id]={source_type_id}",
                 status_code=200,
                 json={"data": [{"name": mock_source_name}]},
+            )
+            m.get(
+                f"http://www.sources.com/api/v1.0/applications?filter[source_id]={source_type_id}",
+                status_code=200,
+                json={"data": [{"settings": {}}]},
             )
             m.get(
                 f"http://www.sources.com/api/v1.0/endpoints?filter[source_id]={test_source_id}",

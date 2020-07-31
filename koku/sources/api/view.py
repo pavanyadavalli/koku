@@ -77,14 +77,15 @@ class DestroySourceMixin(mixins.DestroyModelMixin):
 
 
 LOG = logging.getLogger(__name__)
-MIXIN_LIST = [mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet]
-HTTP_METHOD_LIST = ["get", "head", "patch"]
+MIXIN_LIST = [mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet]
+HTTP_METHOD_LIST = ["get", "head"]
 
 if settings.DEVELOPMENT:
     MIXIN_LIST.append(mixins.CreateModelMixin)
     MIXIN_LIST.append(DestroySourceMixin)
     HTTP_METHOD_LIST.append("post")
     HTTP_METHOD_LIST.append("delete")
+    HTTP_METHOD_LIST.append("patch")
 
 
 class SourceFilter(FilterSet):
@@ -122,7 +123,7 @@ class SourcesViewSet(*MIXIN_LIST):
     """Sources View.
 
     A viewset that provides default `retrieve()`,
-    `update()`, and `list()` actions.
+    and `list()` actions.
     """
 
     lookup_fields = ("source_id", "source_uuid")

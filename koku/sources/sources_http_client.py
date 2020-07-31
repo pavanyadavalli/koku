@@ -166,8 +166,8 @@ class SourcesHTTPClient:
         applications_response = r.json()
         if not applications_response.get("data"):
             raise SourcesHTTPClientError(f"No application data for source: {self._source_id}")
-        aws_settings = applications_response.get("data")[0].get("settings")
-        return aws_settings
+        app_settings = applications_response.get("data")[0].get("settings")
+        return app_settings
 
     def get_aws_role_arn(self):
         """Get the roleARN from Sources Authentication service."""

@@ -423,11 +423,6 @@ ENABLE_S3_ARCHIVING = ENVIRONMENT.bool("ENABLE_S3_ARCHIVING", default=False)
 # Time to wait between cold storage retrieval for data export. Default is 3 hours
 COLD_STORAGE_RETRIVAL_WAIT_TIME = int(os.getenv("COLD_STORAGE_RETRIVAL_WAIT_TIME", default="10800"))
 
-# Sources Client API Endpoints
-KOKU_SOURCES_CLIENT_HOST = ENVIRONMENT.get_value("KOKU_SOURCES_CLIENT_HOST", default="localhost")
-KOKU_SOURCES_CLIENT_PORT = ENVIRONMENT.get_value("KOKU_SOURCES_CLIENT_PORT", default="4000")
-SOURCES_CLIENT_BASE_URL = f"http://{KOKU_SOURCES_CLIENT_HOST}:{KOKU_SOURCES_CLIENT_PORT}/"
-
 # Prometheus pushgateway hostname:port
 PROMETHEUS_PUSHGATEWAY = ENVIRONMENT.get_value("PROMETHEUS_PUSHGATEWAY", default="localhost:9091")
 

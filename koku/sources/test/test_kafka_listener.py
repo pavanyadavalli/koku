@@ -317,25 +317,26 @@ class SourcesKafkaMsgHandlerTest(TestCase):
     def test_get_sources_msg_data(self):
         """Test to get sources details from msg."""
         test_topic = "platform.sources.event-stream"
-        test_event_type = "Application.create"
+        test_event_types = ["Application.create", "Application.update"]
         test_offset = 5
         cost_management_app_type = 2
         test_auth_header = "testheader"
         test_value = '{"id":1,"source_id":1,"application_type_id":2}'
 
-        msg = ConsumerRecord(
-            topic=test_topic,
-            offset=test_offset,
-            event_type=test_event_type,
-            auth_header=test_auth_header,
-            value=bytes(test_value, encoding="utf-8"),
-        )
+        for test_event_type in test_event_types:
+            msg = ConsumerRecord(
+                topic=test_topic,
+                offset=test_offset,
+                event_type=test_event_type,
+                auth_header=test_auth_header,
+                value=bytes(test_value, encoding="utf-8"),
+            )
 
-        response = source_integration.get_sources_msg_data(msg, cost_management_app_type)
-        self.assertEqual(response.get("event_type"), test_event_type)
-        self.assertEqual(response.get("offset"), test_offset)
-        self.assertEqual(response.get("source_id"), 1)
-        self.assertEqual(response.get("auth_header"), test_auth_header)
+            response = source_integration.get_sources_msg_data(msg, cost_management_app_type)
+            self.assertEqual(response.get("event_type"), test_event_type)
+            self.assertEqual(response.get("offset"), test_offset)
+            self.assertEqual(response.get("source_id"), 1)
+            self.assertEqual(response.get("auth_header"), test_auth_header)
 
     def test_get_sources_msg_data_destroy(self):
         """Test to get sources details from msg for destroy event."""

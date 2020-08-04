@@ -31,7 +31,7 @@ class OCPUsageReportPeriod(models.Model):
     class Meta:
         """Meta for OCPUsageReportPeriod."""
 
-        unique_together = ("cluster_id", "report_period_start", "provider")
+        unique_together = ("cluster_id", "report_period_start", "provider", "manifest")
 
     cluster_id = models.CharField(max_length=50, null=False)
     cluster_alias = models.CharField(max_length=256, null=True)
@@ -43,6 +43,7 @@ class OCPUsageReportPeriod(models.Model):
     derived_cost_datetime = models.DateTimeField(null=True)
 
     provider = models.ForeignKey("api.Provider", on_delete=models.CASCADE)
+    manifest = models.ForeignKey("reporting_common.CostUsageReportManifest", on_delete=models.CASCADE, null=True)
 
 
 class OCPUsageReport(models.Model):

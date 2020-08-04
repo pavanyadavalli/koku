@@ -66,7 +66,7 @@ class ProcessedReport:
 class AWSReportProcessor(ReportProcessorBase):
     """Cost Usage Report processor."""
 
-    def __init__(self, schema_name, report_path, compression, provider_uuid, manifest_id=None):
+    def __init__(self, schema_name, report_path, compression, provider_uuid, manifest_id):
         """Initialize the report processor.
 
         Args:
@@ -276,7 +276,7 @@ class AWSReportProcessor(ReportProcessorBase):
         bill_type = row.get("bill/BillType")
         payer_account_id = row.get("bill/PayerAccountId")
 
-        key = (bill_type, payer_account_id, start_date, self._provider_uuid)
+        key = (bill_type, payer_account_id, start_date, self._provider_uuid, self._manifest_id)
         if key in self.processed_report.bills:
             return self.processed_report.bills[key]
 
@@ -286,9 +286,12 @@ class AWSReportProcessor(ReportProcessorBase):
         data = self._get_data_for_table(row, table_name._meta.db_table)
 
         data["provider_id"] = self._provider_uuid
+        data["manifest_id"] = self._manifest_id
 
         bill_id = report_db_accessor.insert_on_conflict_do_nothing(
-            table_name, data, conflict_columns=["bill_type", "payer_account_id", "billing_period_start", "provider_id"]
+            table_name,
+            data,
+            conflict_columns=["bill_type", "payer_account_id", "billing_period_start", "provider_id", "manifest_id"],
         )
 
         self.processed_report.bills[key] = bill_id

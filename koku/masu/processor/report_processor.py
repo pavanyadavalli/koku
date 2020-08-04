@@ -95,6 +95,7 @@ class ReportProcessor:
                 report_path=self.report_path,
                 compression=self.compression,
                 provider_uuid=self.provider_uuid,
+                manifest_id=self.manifest_id,
             )
         if self.provider_type in (Provider.PROVIDER_GCP, Provider.PROVIDER_GCP_LOCAL):
             return GCPReportProcessor(

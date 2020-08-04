@@ -264,7 +264,7 @@ class SourcesViewSet(*MIXIN_LIST):
 
     @method_decorator(never_cache)
     @action(methods=["get"], detail=True, permission_classes=[AllowAny])
-    def stats(self, request, pk=None):
+    def stats(self, request, pk=None, **kwargs):
         """Get source stats."""
         account_id = request.user.customer.account_id
         schema_name = create_schema_name(account_id)
@@ -277,5 +277,9 @@ class SourcesViewSet(*MIXIN_LIST):
         else:
             stats["provider_linked"] = True
             tenant = Tenant.objects.get(schema_name=schema_name)
-            stats.update(manager.provider_statistics(tenant))
+            show_files = False
+            show_files_arg = request.query_params.get("show_files", None)
+            if show_files_arg:
+                show_files = True if show_files_arg.lower() == "true" else False
+            stats.update(manager.provider_statistics(tenant, show_files))
         return Response(stats)

@@ -402,11 +402,35 @@ class ProviderManagerTest(IamTestCase):
             self.assertIsNotNone(value_data.get("assembly_id"))
             self.assertIsNotNone(value_data.get("files_processed"))
             self.assertEqual(value_data.get("billing_period_start"), key_date_obj.date())
-            self.assertGreater(parser.parse(value_data.get("last_process_start_date")), key_date_obj)
-            self.assertGreater(parser.parse(value_data.get("last_process_complete_date")), key_date_obj)
-            self.assertGreater(parser.parse(value_data.get("last_manifest_complete_date")), key_date_obj)
+            self.assertGreater(parser.parse(value_data.get("manifest_complete_date")), key_date_obj)
             self.assertGreater(parser.parse(value_data.get("summary_data_creation_datetime")), key_date_obj)
-            self.assertGreater(parser.parse(value_data.get("summary_data_updated_datetime")), key_date_obj)
+
+    def test_provider_statistics_show_files(self):
+        """Test that the provider statistics method returns report stats with report files."""
+        provider = Provider.objects.first()
+
+        provider_uuid = provider.uuid
+        manager = ProviderManager(provider_uuid)
+
+        stats = manager.provider_statistics(self.tenant, show_files=True)
+
+        self.assertIn(str(self.dh.this_month_start.date()), stats.keys())
+        self.assertIn(str(self.dh.last_month_start.date()), stats.keys())
+
+        for key, value in stats.items():
+            key_date_obj = parser.parse(key)
+            value_data = value.pop()
+
+            self.assertIsNotNone(value_data.get("assembly_id"))
+            self.assertIsNotNone(value_data.get("files_processed"))
+            self.assertEqual(value_data.get("billing_period_start"), key_date_obj.date())
+            self.assertGreater(parser.parse(value_data.get("manifest_complete_date")), key_date_obj)
+            self.assertGreater(parser.parse(value_data.get("summary_data_creation_datetime")), key_date_obj)
+            self.assertIsNotNone(value_data.get("files"))
+            file_data = value_data.get("files").pop()
+            self.assertIsNotNone(file_data.get("name"))
+            self.assertIsNotNone(file_data.get("started"))
+            self.assertIsNotNone(file_data.get("completed"))
 
     def test_provider_statistics_no_report_data(self):
         """Test that the provider statistics method returns no report stats with no report data."""

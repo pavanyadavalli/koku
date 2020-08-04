@@ -65,7 +65,7 @@ class ProcessedOCPReport:
 class OCPReportProcessor:
     """OCP Usage Report processor."""
 
-    def __init__(self, schema_name, report_path, compression, provider_uuid):
+    def __init__(self, schema_name, report_path, compression, provider_uuid, manifest_id):
         """Initialize the report processor.
 
         Args:
@@ -78,11 +78,13 @@ class OCPReportProcessor:
         self._processor = None
         _, self.report_type = utils.detect_type(report_path)
         if self.report_type == utils.OCPReportTypes.CPU_MEM_USAGE:
-            self._processor = OCPCpuMemReportProcessor(schema_name, report_path, compression, provider_uuid)
+            self._processor = OCPCpuMemReportProcessor(
+                schema_name, report_path, compression, provider_uuid, manifest_id
+            )
         elif self.report_type == utils.OCPReportTypes.STORAGE:
-            self._processor = OCPStorageProcessor(schema_name, report_path, compression, provider_uuid)
+            self._processor = OCPStorageProcessor(schema_name, report_path, compression, provider_uuid, manifest_id)
         elif self.report_type == utils.OCPReportTypes.NODE_LABELS:
-            self._processor = OCPNodeLabelProcessor(schema_name, report_path, compression, provider_uuid)
+            self._processor = OCPNodeLabelProcessor(schema_name, report_path, compression, provider_uuid, manifest_id)
         elif self.report_type == utils.OCPReportTypes.UNKNOWN:
             raise OCPReportProcessorError("Unknown OCP report type.")
 
@@ -98,7 +100,7 @@ class OCPReportProcessor:
 class OCPReportProcessorBase(ReportProcessorBase):
     """Base class for OCP report processing."""
 
-    def __init__(self, schema_name, report_path, compression, provider_uuid):
+    def __init__(self, schema_name, report_path, compression, provider_uuid, manifest_id):
         """Initialize base class."""
         super().__init__(
             schema_name=schema_name,
@@ -108,7 +110,7 @@ class OCPReportProcessorBase(ReportProcessorBase):
             manifest_id=None,
             processed_report=ProcessedOCPReport(),
         )
-
+        self._manifest_id = manifest_id
         self._report_name = path.basename(report_path)
         self._cluster_id = utils.get_cluster_id_from_provider(provider_uuid)
         self._cluster_alias = utils.get_cluster_alias_from_cluster_id(self._cluster_id)
@@ -169,7 +171,7 @@ class OCPReportProcessorBase(ReportProcessorBase):
         start = ciso8601.parse_datetime(row.get("report_period_start").replace(" +0000 UTC", "+0000"))
         end = ciso8601.parse_datetime(row.get("report_period_end").replace(" +0000 UTC", "+0000"))
 
-        key = (cluster_id, start, self._provider_uuid)
+        key = (cluster_id, start, self._provider_uuid, self._manifest_id)
         if key in self.processed_report.report_periods:
             return self.processed_report.report_periods[key]
 
@@ -182,10 +184,11 @@ class OCPReportProcessorBase(ReportProcessorBase):
             "report_period_start": start,
             "report_period_end": end,
             "provider_id": self._provider_uuid,
+            "manifest_id": self._manifest_id,
         }
-
+        LOG.info(f"CREATE REPORT FOR MANFIEST ID: {str(self._manifest_id)}")
         report_period_id = report_db_accessor.insert_on_conflict_do_nothing(
-            table_name, data, conflict_columns=["cluster_id", "report_period_start", "provider_id"]
+            table_name, data, conflict_columns=["cluster_id", "report_period_start", "provider_id", "manifest_id"]
         )
 
         self.processed_report.report_periods[key] = report_period_id
@@ -278,7 +281,7 @@ class OCPCpuMemReportProcessor(OCPReportProcessorBase):
 
     report_type = "OCPCpuMemReport"
 
-    def __init__(self, schema_name, report_path, compression, provider_uuid):
+    def __init__(self, schema_name, report_path, compression, provider_uuid, manifest_id):
         """Initialize the report processor.
 
         Args:
@@ -289,7 +292,11 @@ class OCPCpuMemReportProcessor(OCPReportProcessorBase):
 
         """
         super().__init__(
-            schema_name=schema_name, report_path=report_path, compression=compression, provider_uuid=provider_uuid
+            schema_name=schema_name,
+            report_path=report_path,
+            compression=compression,
+            provider_uuid=provider_uuid,
+            manifest_id=manifest_id,
         )
         self.table_name = OCPUsageLineItem()
         stmt = (
@@ -345,7 +352,7 @@ class OCPStorageProcessor(OCPReportProcessorBase):
 
     report_type = "OCPStorageReport"
 
-    def __init__(self, schema_name, report_path, compression, provider_uuid):
+    def __init__(self, schema_name, report_path, compression, provider_uuid, manifest_id):
         """Initialize the report processor.
 
         Args:
@@ -356,7 +363,11 @@ class OCPStorageProcessor(OCPReportProcessorBase):
 
         """
         super().__init__(
-            schema_name=schema_name, report_path=report_path, compression=compression, provider_uuid=provider_uuid
+            schema_name=schema_name,
+            report_path=report_path,
+            compression=compression,
+            provider_uuid=provider_uuid,
+            manifest_id=manifest_id,
         )
         self.table_name = OCPStorageLineItem()
         stmt = (
@@ -419,7 +430,7 @@ class OCPNodeLabelProcessor(OCPReportProcessorBase):
 
     report_type = "OCPNodeLabelReport"
 
-    def __init__(self, schema_name, report_path, compression, provider_uuid):
+    def __init__(self, schema_name, report_path, compression, provider_uuid, manifest_id):
         """Initialize the report processor.
 
         Args:
@@ -430,7 +441,11 @@ class OCPNodeLabelProcessor(OCPReportProcessorBase):
 
         """
         super().__init__(
-            schema_name=schema_name, report_path=report_path, compression=compression, provider_uuid=provider_uuid
+            schema_name=schema_name,
+            report_path=report_path,
+            compression=compression,
+            provider_uuid=provider_uuid,
+            manifest_id=manifest_id,
         )
         self.table_name = OCPNodeLabelLineItem()
         stmt = (

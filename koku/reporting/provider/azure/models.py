@@ -41,7 +41,7 @@ class AzureCostEntryBill(models.Model):
     class Meta:
         """Meta for AzureCostEntryBill."""
 
-        unique_together = ("billing_period_start", "provider")
+        unique_together = ("billing_period_start", "provider", "manifest")
 
     billing_period_start = models.DateTimeField(null=False)
     billing_period_end = models.DateTimeField(null=False)
@@ -51,6 +51,7 @@ class AzureCostEntryBill(models.Model):
     derived_cost_datetime = models.DateTimeField(null=True)
 
     provider = models.ForeignKey("api.Provider", on_delete=models.CASCADE)
+    manifest = models.ForeignKey("reporting_common.CostUsageReportManifest", on_delete=models.CASCADE, null=True)
 
 
 class AzureCostEntryProductService(models.Model):

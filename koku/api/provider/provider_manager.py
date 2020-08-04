@@ -83,19 +83,17 @@ class ProviderManager:
         """Determine if the current_user can remove the provider."""
         return self.model.customer == current_user.customer
 
-    def _get_tenant_provider_stats(self, provider, tenant, period_start):
+    def _get_tenant_provider_stats(self, provider, tenant, manifest_id):
         """Return provider statistics for schema."""
         stats = {}
         query = None
         with tenant_context(tenant):
             if provider.type == Provider.PROVIDER_OCP:
-                query = OCPUsageReportPeriod.objects.filter(
-                    provider=provider, report_period_start=period_start
-                ).first()
+                query = OCPUsageReportPeriod.objects.filter(provider=provider, manifest=manifest_id).first()
             elif provider.type == Provider.PROVIDER_AWS or provider.type == Provider.PROVIDER_AWS_LOCAL:
-                query = AWSCostEntryBill.objects.filter(provider=provider, billing_period_start=period_start).first()
+                query = AWSCostEntryBill.objects.filter(provider=provider, manifest=manifest_id).first()
             elif provider.type == Provider.PROVIDER_AZURE or provider.type == Provider.PROVIDER_AZURE_LOCAL:
-                query = AzureCostEntryBill.objects.filter(provider=provider, billing_period_start=period_start).first()
+                query = AzureCostEntryBill.objects.filter(provider=provider, manifest=manifest_id).first()
         if query and query.summary_data_creation_datetime:
             stats["summary_data_creation_datetime"] = query.summary_data_creation_datetime.strftime(DATE_TIME_FORMAT)
         if query and query.summary_data_updated_datetime:
@@ -105,7 +103,27 @@ class ProviderManager:
 
         return stats
 
-    def provider_statistics(self, tenant=None):
+    def _format_datetime(self, timestamp):
+        """Helper to format datetime if timestamp is avaiabile."""
+        formated_timestamp = None
+        if timestamp:
+            formated_timestamp = timestamp.strftime(DATE_TIME_FORMAT)
+        return formated_timestamp
+
+    def report_file_stats_for_manifest(self, provider_manifest):
+        """Return a json object of report manifest file statistics."""
+        manifest_files = []
+        report_status = CostUsageReportStatus.objects.filter(manifest=provider_manifest)
+        for report in report_status:
+            report_stats = {
+                "name": report.report_name,
+                "started": self._format_datetime(report.last_started_datetime),
+                "completed": self._format_datetime(report.last_completed_datetime),
+            }
+            manifest_files.append(report_stats)
+        return manifest_files
+
+    def provider_statistics(self, tenant, show_files=False):
         """Return a json object of provider report statistics."""
         manifest_months_query = (
             CostUsageReportManifest.objects.filter(provider=self.model)
@@ -129,7 +147,11 @@ class ProviderManager:
 
             for provider_manifest in stats_query.reverse()[:3]:
                 status = {}
-                report_status = CostUsageReportStatus.objects.filter(manifest=provider_manifest).first()
+                manifest_files = []
+                if show_files:
+                    manifest_files = self.report_file_stats_for_manifest(provider_manifest)
+
+                status["manifest_id"] = provider_manifest.id
                 status["assembly_id"] = provider_manifest.assembly_id
                 status["billing_period_start"] = provider_manifest.billing_period_start_datetime.date()
 
@@ -137,25 +159,21 @@ class ProviderManager:
                     manifest_id=provider_manifest.id, last_completed_datetime__isnull=False
                 ).count()
                 status["files_processed"] = f"{num_processed_files}/{provider_manifest.num_total_files}"
-
-                last_process_start_date = None
-                last_process_complete_date = None
-                last_manifest_complete_datetime = None
+                if manifest_files:
+                    status["files"] = manifest_files
+                manifest_complete_datetime = None
                 if provider_manifest.manifest_completed_datetime:
-                    last_manifest_complete_datetime = provider_manifest.manifest_completed_datetime.strftime(
+                    manifest_complete_datetime = provider_manifest.manifest_completed_datetime.strftime(
                         DATE_TIME_FORMAT
                     )
-                if report_status and report_status.last_started_datetime:
-                    last_process_start_date = report_status.last_started_datetime.strftime(DATE_TIME_FORMAT)
-                if report_status and report_status.last_completed_datetime:
-                    last_process_complete_date = report_status.last_completed_datetime.strftime(DATE_TIME_FORMAT)
-                status["last_process_start_date"] = last_process_start_date
-                status["last_process_complete_date"] = last_process_complete_date
-                status["last_manifest_complete_date"] = last_manifest_complete_datetime
-                schema_stats = self._get_tenant_provider_stats(provider_manifest.provider, tenant, month)
+
+                schema_stats = self._get_tenant_provider_stats(
+                    provider_manifest.provider, tenant, provider_manifest.id
+                )
                 status["summary_data_creation_datetime"] = schema_stats.get("summary_data_creation_datetime")
-                status["summary_data_updated_datetime"] = schema_stats.get("summary_data_updated_datetime")
                 status["derived_cost_datetime"] = schema_stats.get("derived_cost_datetime")
+                status["manifest_complete_date"] = manifest_complete_datetime
+
                 month_stats.append(status)
 
             provider_stats[stats_key] = month_stats

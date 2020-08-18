@@ -31,7 +31,10 @@ TESTING_DIRS = [
     "local_providers/insights_local",
     "pvc_dir/insights_local",
     "pvc_dir/processing",
-    "parquet_data"
+    "parquet_data",
+    "hadoop",
+    "metastore",
+    "presto",
 ]
 
 

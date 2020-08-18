@@ -44,7 +44,6 @@ echo "Adding hive.s3.aws-access-key, hive.s3.aws-secret-key, and hive.s3.endpoin
 echo "hive.s3.aws-access-key=$AWS_ACCESS_KEY_ID" >> "$HIVE_CATALOG_CONFIG"
 echo "hive.s3.aws-secret-key=$AWS_SECRET_ACCESS_KEY" >> "$HIVE_CATALOG_CONFIG"
 echo "hive.s3.endpoint=$S3_ENDPOINT" >> "$HIVE_CATALOG_CONFIG"
-
 fi
 
 # add UID to /etc/passwd if missing

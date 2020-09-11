@@ -4,6 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+psycopg2-binary = ">=2.8"
 django-environ = ">=0.4"
 djangorestframework = ">=3.11"
 gunicorn = ">=20.0"
@@ -13,7 +14,7 @@ Django = "==3.1.1"
 psutil = ">=5.6"
 django-filter = ">=2.2"
 requests = ">=2.20"
-django-tenant-schemas = ">=1.10"
+django-tenants = ">=3.2.1"
 django-cors-headers = ">=3.1"
 querystring-parser = ">=1.2"
 djangorestframework-csv = ">=2.1"

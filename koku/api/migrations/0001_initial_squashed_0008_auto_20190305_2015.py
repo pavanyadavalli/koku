@@ -110,7 +110,7 @@ class Migration(migrations.Migration):
                 ("username", models.CharField(max_length=150, unique=True)),
                 ("email", models.EmailField(blank=True, max_length=254)),
                 ("date_created", models.DateTimeField(auto_now_add=True)),
-                ("is_active", models.NullBooleanField(default=True)),
+                ("is_active", models.BooleanField(default=True, null=True)),
                 (
                     "customer",
                     models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, to="api.Customer"),

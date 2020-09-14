@@ -35,7 +35,7 @@ from django.core.cache import caches
 from django.db.models import Max
 from django.db.models import Min
 from django.db.utils import IntegrityError
-from tenant_schemas.utils import schema_context
+from django_tenants.utils import schema_context
 
 import koku.celery as koku_celery
 from api.iam.models import Tenant

@@ -33,9 +33,9 @@ from django.db.utils import OperationalError
 from django.http import HttpResponse
 from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
+from django_tenants.middleware import TenantMiddleware
 from prometheus_client import Counter
 from rest_framework.exceptions import ValidationError
-from tenant_schemas.middleware import BaseTenantMiddleware
 
 from api.common import RH_IDENTITY_HEADER
 from api.iam.models import Customer
@@ -102,7 +102,7 @@ class HttpResponseFailedDependency(JsonResponse):
         super().__init__(data)
 
 
-class KokuTenantMiddleware(BaseTenantMiddleware):
+class KokuTenantMiddleware(TenantMiddleware):
     """A subclass of the Django-tenant-schemas tenant middleware.
     Determines which schema to use based on the customer's schema
     found from the user tied to a request.

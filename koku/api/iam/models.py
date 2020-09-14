@@ -18,7 +18,7 @@
 from uuid import uuid4
 
 from django.db import models
-from tenant_schemas.models import TenantMixin
+from django_tenants.models import TenantMixin
 
 
 class Customer(models.Model):

@@ -22,7 +22,7 @@ from decimal import InvalidOperation
 
 import django.apps
 from django.db import connection
-from tenant_schemas.utils import schema_context
+from django_tenants.utils import schema_context
 
 from masu.config import Config
 from masu.database.koku_database_access import KokuDBAccess

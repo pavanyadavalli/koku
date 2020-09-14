@@ -99,7 +99,6 @@ class SourceDetails:
         self.source_type_id = int(details.get("source_type_id"))
         self.source_uuid = details.get("uid")
         self.source_type_name = sources_network.get_source_type_name(self.source_type_id)
-        self.endpoint_id = sources_network.get_endpoint_id()
         self.source_type = SOURCE_PROVIDER_MAP.get(self.source_type_name)
 
 
@@ -219,7 +218,7 @@ def get_sources_msg_data(msg, app_type_id):
                     msg_data["auth_header"] = _extract_from_header(msg.headers(), KAFKA_HDR_RH_IDENTITY)
             elif event_type in (KAFKA_AUTHENTICATION_CREATE, KAFKA_AUTHENTICATION_UPDATE):
                 LOG.debug("Authentication Message: %s", str(msg))
-                if value.get("resource_type") == "Endpoint":
+                if value.get("resource_type") == "Application":
                     msg_data["event_type"] = event_type
                     msg_data["offset"] = msg.offset()
                     msg_data["partition"] = msg.partition()
@@ -321,10 +320,6 @@ def sources_network_info(source_id, auth_header):
 
     """
     src_details = SourceDetails(auth_header, source_id)
-    if not src_details.endpoint_id and src_details.source_type_name != SOURCES_OCP_SOURCE_NAME:
-        LOG.warning(f"Unable to find endpoint for Source ID: {source_id}")
-        return
-
     if not src_details.source_type:
         LOG.warning(f"Unexpected source type ID: {src_details.source_type_id}")
         return
@@ -343,7 +338,8 @@ def cost_mgmt_msg_filter(msg_data):
 
     if event_type in (KAFKA_AUTHENTICATION_CREATE, KAFKA_AUTHENTICATION_UPDATE):
         sources_network = SourcesHTTPClient(auth_header)
-        source_id = sources_network.get_source_id_from_endpoint_id(msg_data.get("resource_id"))
+        LOG.info(f"MSG_DATA: {str(msg_data)}")
+        source_id = sources_network.get_source_id_from_applications_id(msg_data.get("resource_id"))
         msg_data["source_id"] = source_id
         if not sources_network.get_application_type_is_cost_management(source_id):
             LOG.info(f"Resource id {msg_data.get('resource_id')} not associated with cost-management.")

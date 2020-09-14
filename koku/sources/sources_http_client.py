@@ -77,35 +77,21 @@ class SourcesHTTPClient:
         response = r.json()
         return response
 
-    def get_endpoint_id(self):
-        """Get Sources Endpoint ID from Source ID."""
-        endpoint_url = f"{self._base_url}/endpoints?filter[source_id]={self._source_id}"
-        r = self._get_network_response(endpoint_url, self._identity_header, "Unable to endpoint ID")
+    def get_source_id_from_applications_id(self, resource_id):
+        """Get Source ID from Sources Authentications ID."""
+        authentication_url = f"{self._base_url}/applications?filter[id]={resource_id}"
+        r = self._get_network_response(
+            authentication_url, self._identity_header, "Unable to source ID from endpoint ID"
+        )
         if r.status_code == 404:
             raise SourceNotFoundError(f"Status Code: {r.status_code}")
         elif r.status_code != 200:
             raise SourcesHTTPClientError("Status Code: ", r.status_code)
-        endpoint_response = r.json()
-
-        endpoint_id = None
-        if endpoint_response.get("data"):
-            endpoint_id = endpoint_response.get("data")[0].get("id")
-
-        return endpoint_id
-
-    def get_source_id_from_endpoint_id(self, resource_id):
-        """Get Source ID from Sources Endpoint ID."""
-        endpoint_url = f"{self._base_url}/endpoints?filter[id]={resource_id}"
-        r = self._get_network_response(endpoint_url, self._identity_header, "Unable to source ID from endpoint ID")
-        if r.status_code == 404:
-            raise SourceNotFoundError(f"Status Code: {r.status_code}")
-        elif r.status_code != 200:
-            raise SourcesHTTPClientError("Status Code: ", r.status_code)
-        endpoint_response = r.json()
+        authentication_response = r.json()
 
         source_id = None
-        if endpoint_response.get("data"):
-            source_id = endpoint_response.get("data")[0].get("source_id")
+        if authentication_response.get("data"):
+            source_id = authentication_response.get("data")[0].get("source_id")
 
         return source_id
 
@@ -160,18 +146,18 @@ class SourcesHTTPClient:
 
     def get_aws_credentials(self):
         """Get the roleARN from Sources Authentication service."""
-        endpoint_url = "{}/endpoints?filter[source_id]={}".format(self._base_url, str(self._source_id))
+        application_url = "{}/applications?filter[source_id]={}".format(self._base_url, str(self._source_id))
 
-        r = self._get_network_response(endpoint_url, self._identity_header, "Unable to AWS RoleARN")
-        endpoint_response = r.json()
-        if endpoint_response.get("data"):
-            resource_id = endpoint_response.get("data")[0].get("id")
+        r = self._get_network_response(application_url, self._identity_header, "Unable to AWS RoleARN")
+        application_response = r.json()
+        if application_response.get("data"):
+            resource_id = application_response.get("data")[0].get("id")
         else:
             raise SourcesHTTPClientError(
-                f"Unable to get AWS roleARN.  Endpoint not found for Source: {self._source_id}"
+                f"Unable to get AWS roleARN.  Application not found for Source: {self._source_id}"
             )
 
-        authentications_str = "{}/authentications?filter[resource_type]=Endpoint&[authtype]=arn&[resource_id]={}"
+        authentications_str = "{}/authentications?filter[resource_type]=Application&[authtype]=arn&[resource_id]={}"
         authentications_url = authentications_str.format(self._base_url, str(resource_id))
         r = self._get_network_response(authentications_url, self._identity_header, "Unable to AWS RoleARN")
         authentications_response = r.json()

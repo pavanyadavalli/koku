@@ -899,8 +899,7 @@ class SourcesKafkaMsgHandlerTest(TestCase):
             SourcesHTTPClient, "get_source_details", return_value={"name": "my ansible", "source_type_id": 2}
         ):
             with patch.object(SourcesHTTPClient, "get_source_type_name", return_value="ansible-tower"):
-                with patch.object(SourcesHTTPClient, "get_endpoint_id", return_value=1):
-                    self.assertIsNone(process_message(test_application_id, msg_data))
+                self.assertIsNone(process_message(test_application_id, msg_data))
 
     @patch.object(Config, "SOURCES_API_URL", "http://www.sources.com")
     @patch("sources.kafka_listener.sources_network_info", returns=None)
@@ -962,7 +961,9 @@ class SourcesKafkaMsgHandlerTest(TestCase):
         for test in test_matrix:
             msg_data = MsgDataGenerator(event_type=test.get("event"), value=test.get("value")).get_data()
             with patch.object(
-                SourcesHTTPClient, "get_source_id_from_endpoint_id", return_value=test.get("value").get("source_id")
+                SourcesHTTPClient,
+                "get_source_id_from_applications_id",
+                return_value=test.get("value").get("source_id"),
             ):
                 with patch.object(
                     SourcesHTTPClient,
@@ -1085,7 +1086,9 @@ class SourcesKafkaMsgHandlerTest(TestCase):
             test_source.save()
             msg_data = MsgDataGenerator(event_type=test.get("event"), value=test.get("value")).get_data()
             with patch.object(
-                SourcesHTTPClient, "get_source_id_from_endpoint_id", return_value=test.get("value").get("source_id")
+                SourcesHTTPClient,
+                "get_source_id_from_applications_id",
+                return_value=test.get("value").get("source_id"),
             ):
                 with patch.object(
                     SourcesHTTPClient,

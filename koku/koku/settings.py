@@ -222,6 +222,7 @@ DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
 
 #
 TENANT_MODEL = "api.Tenant"
+TENANT_DOMAIN_MODEL = "api.TenantDomain"
 
 PROMETHEUS_EXPORT_MIGRATIONS = False
 

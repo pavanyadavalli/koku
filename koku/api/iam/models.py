@@ -18,6 +18,7 @@
 from uuid import uuid4
 
 from django.db import models
+from django_tenants.models import DomainMixin
 from django_tenants.models import TenantMixin
 
 
@@ -67,3 +68,7 @@ class Tenant(TenantMixin):
 
     # Delete all schemas when a tenant is removed
     auto_drop_schema = True
+
+
+class TenantDomain(DomainMixin):
+    pass

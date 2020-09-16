@@ -41,9 +41,13 @@ cte_values_agg AS (
    RETURNING value, id AS values_id
     )
 INSERT INTO {{schema | sqlsafe}}.reporting_ocpusagepodlabel_summary_values_mtm (ocpusagepodlabelsummary_id, ocptagsvalues_id)
-SELECT DISTINCT ins1.key_id, ins2.values_id
+SELECT ins1.key_id,
+    ins2.values_id
 FROM cte_tag_value d
-INNER JOIN ins1 ON d.key = ins1.key
-INNER JOIN ins2 ON d.value = ins2.value
+JOIN ins1
+    ON d.key = ins1.key
+JOIN ins2
+    ON d.value = ins2.value
+GROUP BY ins1.key_id, ins2.values_id
 ON CONFLICT (ocpusagepodlabelsummary_id, ocptagsvalues_id) DO NOTHING
 ;

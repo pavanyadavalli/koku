@@ -1121,8 +1121,9 @@ class OCPProviderMap(ProviderMap):
                             "sup_usage": Sum(
                                 Coalesce(
                                     KeyDecimalTransform("storage", "supplementary_usage_cost"),
-                                    Value(0, output_field=DecimalField()),
+                                    Value(0, output_field=DecimalField())
                                 )
+                                + Coalesce(F("supplementary_monthly_cost"), Value(0, output_field=DecimalField()))
                             ),
                             "sup_markup": Value(0, output_field=DecimalField()),
                             "sup_total": Sum(
@@ -1240,7 +1241,7 @@ class OCPProviderMap(ProviderMap):
                 ("cluster", "project"): OCPPodSummaryByProject,
             },
             "volume": {
-                "default": OCPVolumeSummary,
+                "default": OCPUsageLineItemDailySummary,
                 ("cluster",): OCPVolumeSummary,
                 ("project",): OCPVolumeSummaryByProject,
                 ("cluster", "project"): OCPVolumeSummaryByProject,

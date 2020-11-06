@@ -891,6 +891,7 @@ class OCPReportDBAccessor(ReportDBAccessorBase):
                                     cluster_id=cluster_id,
                                     cluster_alias=cluster_alias,
                                     monthly_cost_type="PVC",
+                                    data_source="Storage",
                                     persistentvolumeclaim=pvc,
                                 ).first()
                                 if not line_item:
@@ -902,6 +903,7 @@ class OCPReportDBAccessor(ReportDBAccessorBase):
                                         cluster_id=cluster_id,
                                         cluster_alias=cluster_alias,
                                         monthly_cost_type="PVC",
+                                        data_source="Storage",
                                         persistentvolumeclaim=pvc,
                                     )
                                 if rate_type == metric_constants.INFRASTRUCTURE_COST_TYPE:
@@ -939,6 +941,7 @@ class OCPReportDBAccessor(ReportDBAccessorBase):
                     cluster_id=cluster_id,
                     cluster_alias=cluster_alias,
                     monthly_cost_type="PVC",
+                    data_source="Storage",
                     persistentvolumeclaim=pvc,
                 ).first()
                 if not line_item:
@@ -950,6 +953,7 @@ class OCPReportDBAccessor(ReportDBAccessorBase):
                         cluster_id=cluster_id,
                         cluster_alias=cluster_alias,
                         monthly_cost_type="PVC",
+                        data_source="Storage",
                         persistentvolumeclaim=pvc,
                     )
                 if rate_type == metric_constants.INFRASTRUCTURE_COST_TYPE:

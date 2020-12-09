@@ -31,7 +31,7 @@ from api.common import log_json
 from api.provider.models import Provider
 from masu.config import Config
 from masu.database.provider_db_accessor import ProviderDBAccessor
-from masu.external.downloader.ocp.ocp_report_downloader import REPORT_TYPES
+from masu.util.ocp.common import REPORT_TYPES
 from masu.processor.aws.aws_report_parquet_processor import AWSReportParquetProcessor
 from masu.processor.azure.azure_report_parquet_processor import AzureReportParquetProcessor
 from masu.processor.ocp.ocp_report_parquet_processor import OCPReportParquetProcessor

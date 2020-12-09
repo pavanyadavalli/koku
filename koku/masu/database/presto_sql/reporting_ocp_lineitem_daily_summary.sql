@@ -36,6 +36,30 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__ocp_node_label_line_item_daily_{{uuid |
 )
 ;
 
+-- namespace label line items by day presto sql
+-- still using a "temp" table here because there is no guarantee how big this might get
+DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__ocp_namespace_label_line_item_daily_{{uuid | sqlsafe}};
+CREATE TABLE hive.{{schema | sqlsafe}}.__ocp_namespace_label_line_item_daily_{{uuid | sqlsafe}} AS (
+    SELECT {{cluster_id}} as "cluster_id",
+           date(nli.interval_start) as "usage_start",
+           max(nli.namespace) as "namespace",
+           nli.namespace_labels,
+           max(nli.source) as "source",
+           max(nli.year) as "year",
+           max(nli.month) as "month"
+      FROM hive.{{schema | sqlsafe}}.openshift_namespace_labels_line_items as "nli"
+     WHERE nli.source = {{source}}
+       AND nli.year = {{year}}
+       AND nli.month = {{month}}
+       AND nli.interval_start >= TIMESTAMP {{start_date}}
+       AND nli.interval_start < date_add('day', 1, TIMESTAMP {{end_date}})
+     GROUP
+        BY {{cluster_id}},
+           date(nli.interval_start),
+           nli.namespace_labels
+)
+;
+
 /*
  * ====================================
  *                POD
@@ -168,6 +192,7 @@ SELECT uuid() as "uuid",
                   li.node,
                   li.source as "source_uuid",
                   map_filter(map_concat(cast(json_parse(coalesce(nli.node_labels, '{}')) as map(varchar, varchar)),
+                                        --cast(json_parse(coalesce(nsli.namespace_labels, '{}')) as map(varchar, varchar)),
                                         cast(json_parse(li.pod_labels) as map(varchar, varchar))),
                              (k, v) -> contains(ek.enabled_keys, k)) as "pod_labels",
                   max(li.resource_id) as "resource_id",
@@ -189,6 +214,10 @@ SELECT uuid() as "uuid",
                ON nli.node = li.node
               AND nli.usage_start = date(li.interval_start)
               AND nli.source = li.source
+             JOIN hive.{{schema | sqlsafe}}.__ocp_namespace_label_line_item_daily_{{uuid | sqlsafe}} as "nsli"
+               ON nsli.namespace = li.namespace
+              AND nsli.usage_start = date(li.interval_start)
+              AND nsli.source = li.source
              LEFT
              JOIN hive.{{schema | sqlsafe}}.__ocp_cluster_capacity_{{uuid | sqlsafe}} as "cc"
                ON cc.source = li.source
@@ -397,5 +426,6 @@ SELECT uuid() as "uuid",
  */
 
 DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__ocp_node_label_line_item_daily_{{uuid | sqlsafe}};
+DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__ocp_namespace_label_line_item_daily_{{uuid | sqlsafe}};
 DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__ocp_cluster_capacity_{{uuid | sqlsafe}};
 DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__volume_nodes_{{uuid | sqlsafe}};

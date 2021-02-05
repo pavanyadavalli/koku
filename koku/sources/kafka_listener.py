@@ -64,7 +64,6 @@ KAFKA_APPLICATION_UPDATE = "Application.update"
 KAFKA_APPLICATION_DESTROY = "Application.destroy"
 KAFKA_AUTHENTICATION_CREATE = "Authentication.create"
 KAFKA_AUTHENTICATION_UPDATE = "Authentication.update"
-KAFKA_SOURCE_DESTROY = "Source.destroy"
 KAFKA_HDR_RH_IDENTITY = "x-rh-identity"
 KAFKA_HDR_EVENT_TYPE = "event_type"
 SOURCES_OCP_SOURCE_NAME = "openshift"
@@ -240,15 +239,6 @@ def get_sources_msg_data(msg, app_type_id):
                         f"Authentication Create/Update Message headers for Source ID: "
                         f"{value.get('resource_id')}: {str(msg.headers())}"
                     )
-            elif event_type in (KAFKA_SOURCE_DESTROY,):
-                msg_data["event_type"] = event_type
-                msg_data["offset"] = msg.offset()
-                msg_data["partition"] = msg.partition()
-                msg_data["source_id"] = int(value.get("id"))
-                msg_data["auth_header"] = _extract_from_header(msg.headers(), KAFKA_HDR_RH_IDENTITY)
-                LOG.debug(
-                    f"Source Update/Destroy Message headers for Source ID: " f"{value.get('id')}: {str(msg.headers())}"
-                )
             else:
                 LOG.debug("Other Message: %s", str(msg))
         except (AttributeError, ValueError, TypeError) as error:
@@ -367,7 +357,7 @@ def cost_mgmt_msg_filter(msg_data):
     event_type = msg_data.get("event_type")
     auth_header = msg_data.get("auth_header")
 
-    if event_type in (KAFKA_APPLICATION_DESTROY, KAFKA_SOURCE_DESTROY):
+    if event_type in (KAFKA_APPLICATION_DESTROY,):
         return msg_data
 
     if event_type in (KAFKA_AUTHENTICATION_CREATE, KAFKA_AUTHENTICATION_UPDATE):
@@ -435,9 +425,6 @@ def process_message(app_type_id, msg):  # noqa: C901
 
     elif msg_data.get("event_type") in (KAFKA_APPLICATION_DESTROY,):
         storage.enqueue_source_delete(msg_data.get("source_id"), msg_data.get("offset"), allow_out_of_order=True)
-
-    elif msg_data.get("event_type") in (KAFKA_SOURCE_DESTROY,):
-        storage.enqueue_source_delete(msg_data.get("source_id"), msg_data.get("offset"))
 
     if msg_data.get("event_type") in (KAFKA_AUTHENTICATION_UPDATE,):
         storage.enqueue_source_update(msg_data.get("source_id"))

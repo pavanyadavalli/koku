@@ -355,7 +355,7 @@ class SourcesKafkaMsgHandlerTest(TestCase):
 
     def test_get_sources_msg_data_destroy(self):
         """Test to get sources details from msg for destroy event."""
-        destroy_events = ["Application.destroy", "Source.destroy"]
+        destroy_events = ["Application.destroy"]
         test_topic = "platform.sources.event-stream"
         test_offset = 5
         cost_management_app_type = 2
@@ -1106,12 +1106,7 @@ class SourcesKafkaMsgHandlerTest(TestCase):
                 "event": source_integration.KAFKA_APPLICATION_DESTROY,
                 "value": {"id": 1, "source_id": 1, "application_type_id": test_application_id},
                 "expected_fn": _expected_destroy,
-            },
-            {
-                "event": source_integration.KAFKA_SOURCE_DESTROY,
-                "value": {"id": 1, "source_id": 1, "application_type_id": test_application_id},
-                "expected_fn": _expected_destroy,
-            },
+            }
         ]
 
         for test in test_matrix:

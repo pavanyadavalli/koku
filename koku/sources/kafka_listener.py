@@ -426,21 +426,15 @@ def process_message(app_type_id, msg):  # noqa: C901
 
         save_auth_info(msg_data.get("auth_header"), msg_data.get("source_id"))
 
-    elif msg_data.get("event_type") in (KAFKA_APPLICATION_UPDATE,):
-        if storage.is_known_source(msg_data.get("source_id")) is False:
-            LOG.info("Update event for unknown source id, skipping...")
-            return
+    elif msg_data.get("event_type") in (KAFKA_AUTHENTICATION_UPDATE, KAFKA_APPLICATION_UPDATE):
         sources_network_info(msg_data.get("source_id"), msg_data.get("auth_header"))
+        storage.enqueue_source_update(msg_data.get("source_id"))
 
     elif msg_data.get("event_type") in (KAFKA_APPLICATION_DESTROY,):
         storage.enqueue_source_delete(msg_data.get("source_id"), msg_data.get("offset"), allow_out_of_order=True)
 
     elif msg_data.get("event_type") in (KAFKA_SOURCE_DESTROY,):
         storage.enqueue_source_delete(msg_data.get("source_id"), msg_data.get("offset"))
-
-    if msg_data.get("event_type") in (KAFKA_AUTHENTICATION_UPDATE,):
-        sources_network_info(msg_data.get("source_id"), msg_data.get("auth_header"))
-        storage.enqueue_source_update(msg_data.get("source_id"))
 
 
 def get_consumer():

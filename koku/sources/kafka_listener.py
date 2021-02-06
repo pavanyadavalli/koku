@@ -316,8 +316,7 @@ def save_auth_info(auth_header, source_id):
     try:
         authentication = get_authentication(source_type, sources_network)
     except SourcesHTTPClientError as error:
-        LOG.info(f"Authentication info not available for Source ID: {source_id}")
-        sources_network.set_source_status(error)
+        LOG.info(f"Authentication info not available for Source ID: {source_id}. Error: {str(error)}")
     else:
         if not authentication:
             return
@@ -440,6 +439,7 @@ def process_message(app_type_id, msg):  # noqa: C901
         storage.enqueue_source_delete(msg_data.get("source_id"), msg_data.get("offset"))
 
     if msg_data.get("event_type") in (KAFKA_AUTHENTICATION_UPDATE,):
+        sources_network_info(msg_data.get("source_id"), msg_data.get("auth_header"))
         storage.enqueue_source_update(msg_data.get("source_id"))
 
 

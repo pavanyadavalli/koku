@@ -172,7 +172,8 @@ def source_settings_complete(provider):
     """Determine if the source application settings are complete."""
     if provider.koku_uuid:
         screen_fn = APP_SETTINGS_SCREEN_MAP.get(provider.source_type)
-        return screen_fn(provider)
+        #return screen_fn(provider)
+        return False
     return False
 
 

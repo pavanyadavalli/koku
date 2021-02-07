@@ -171,6 +171,7 @@ APP_SETTINGS_SCREEN_MAP = {
 def source_settings_complete(provider):
     """Determine if the source application settings are complete."""
     screen_fn = APP_SETTINGS_SCREEN_MAP.get(provider.source_type)
+    LOG.info(f"PROVIDER WHILE CHECKING FOR SETTINGS: {str(provider)}")
     #return screen_fn(provider)
     return False
 

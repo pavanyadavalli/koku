@@ -574,7 +574,7 @@ def execute_koku_provider_op(msg):
             LOG.info(f"Destroying provider {provider.koku_uuid} for Source ID: {provider.source_id}")
         else:
             LOG.error(f"unknown operation: {operation}")
-        #sources_client.set_source_status(None)
+        sources_client.set_source_status(None)
 
     except SourcesProviderCoordinatorError as account_error:
         raise SourcesIntegrationError("Koku provider error: ", str(account_error))
@@ -583,7 +583,7 @@ def execute_koku_provider_op(msg):
             f"Unable to {operation} provider for Source ID: {str(provider.source_id)}. Reason: {str(account_error)}"
         )
         LOG.warning(err_msg)
-        #sources_client.set_source_status(account_error)
+        sources_client.set_source_status(account_error)
     except SkipStatusPush as error:
         LOG.info(f"Platform sources status push skipped. Reason: {str(error)}")
 

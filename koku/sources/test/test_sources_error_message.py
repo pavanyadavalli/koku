@@ -62,12 +62,12 @@ class SourcesErrorMessageTest(TestCase):
         test_matrix = [
             {
                 "key": ProviderErrors.AZURE_CLIENT_ERROR,
-                "internal_message": ", AdalError: Get Token request returned http error: 401 and server response:",
+                "internal_message": ", AzureException: Get Token request returned http error: 401 and server response:",
                 "expected_message": ProviderErrors.AZURE_INCORRECT_CLIENT_SECRET_MESSAGE,
             },
             {
                 "key": ProviderErrors.AZURE_CLIENT_ERROR,
-                "internal_message": ", AdalError: Get Token request returned http error: 400 and server response:",
+                "internal_message": ", AzureException: Get Token request returned http error: 400 and server response:",
                 "expected_message": ProviderErrors.AZURE_INCORRECT_CLIENT_ID_MESSAGE,
             },
             {

@@ -18,7 +18,6 @@
 import logging
 from tempfile import NamedTemporaryFile
 
-from adal.adal_error import AdalError
 from azure.common import AzureException
 from azure.core.exceptions import HttpResponseError
 from msrest.exceptions import ClientException
@@ -72,7 +71,7 @@ class AzureService:
         try:
             container_client = self._cloud_storage_account.get_container_client(container_name)
             blob_list = container_client.list_blobs(name_starts_with=key)
-        except (AdalError, AzureException, ClientException) as error:
+        except (AzureException, ClientException) as error:
             raise AzureServiceError("Failed to download cost export. Error: ", str(error))
 
         for blob in blob_list:
@@ -97,7 +96,7 @@ class AzureService:
 
             with open(file_path, "wb") as blob_download:
                 blob_download.write(blob_client.download_blob().readall())
-        except (AdalError, AzureException, ClientException, IOError) as error:
+        except (AzureException, ClientException, IOError) as error:
             raise AzureServiceError("Failed to download cost export. Error: ", str(error))
         return file_path
 
@@ -121,7 +120,7 @@ class AzureService:
                 message = f"No cost report found in container {container_name} for " f"path {report_path}."
                 raise AzureCostReportNotFound(message)
             return latest_report
-        except (AdalError, AzureException, ClientException) as error:
+        except (AzureException, ClientException) as error:
             raise AzureServiceError("Failed to download cost export. Error: ", str(error))
         except HttpResponseError as httpError:
             if httpError.status_code == 403:
@@ -160,7 +159,7 @@ class AzureService:
                         "directory": report.delivery_info.destination.root_folder_path,
                     }
                     export_reports.append(report_def)
-        except (AdalError, AzureException, ClientException) as exc:
+        except (AzureException, ClientException) as exc:
             raise AzureCostReportNotFound(exc)
 
         return export_reports

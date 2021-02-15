@@ -15,6 +15,7 @@ from ..provider_interface import ProviderInterface
 from api.common import error_obj
 from api.models import Provider
 from api.provider.models import Sources
+from sources.sources_http_client import SourcesHTTPClient
 
 LOG = logging.getLogger(__name__)
 
@@ -51,17 +52,31 @@ class GCPProvider(ProviderInterface):
         except Sources.DoesNotExist:
             LOG.info("Source not found, unable to update data source.")
 
+    def _set_avaiable_status(self, data_source, credentials):
+        """Helper method to find and set the GCP avaiabile source."""
+        try:
+            LOG.info(f"Setting status for: {str(data_source)} creds: {str(credentials)} ")
+            source_query = Sources.objects.get(authentication={"credentials": credentials},
+                                            billing_source={"data_source": data_source})
+            client = SourcesHTTPClient(auth_header=source_query.auth_header, source_id=source_query.source_id)
+            client.set_source_status(None)
+        except Sources.DoesNotExist:
+            LOG.info("Source doesn't exist")
+
     def _detect_billing_export_table(self, data_source, credentials):
         """Verify that dataset and billing export table exists."""
         proj_table = f"{credentials.get('project_id')}.{data_source.get('dataset')}"
         try:
             bigquery_table_id = self.get_table_id(proj_table)
-            if bigquery_table_id:
+            if bigquery_table_id: # Check if table_id is not a key so we know it's the first time we found table-id
                 data_source["table_id"] = bigquery_table_id
                 self.update_source_data_source(credentials, data_source)
+                self._set_avaiable_status(credentials, data_source)
             else:
                 raise SkipStatusPush("Table ID not ready.")
         except NotFound as e:
+            data_source.pop('table_id', None)
+            self.update_source_data_source(credentials, data_source)
             key = "billing_source.dataset"
             LOG.info(error_obj(key, e.message))
             message = (

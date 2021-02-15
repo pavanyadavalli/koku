@@ -118,6 +118,7 @@ def _azure_provider_ready_for_create(provider):
 
 def gcp_settings_ready(provider):
     """Verify that the Application Settings are complete."""
+    LOG.info(f"PROVIDER BILLING_SOURCE: {str(provider.billing_source)} AUTH: {str(provider.authentication)}")
     if provider.billing_source.get("data_source") and provider.authentication.get("credentials"):
         return True
     return False
@@ -170,9 +171,13 @@ APP_SETTINGS_SCREEN_MAP = {
 
 def source_settings_complete(provider):
     """Determine if the source application settings are complete."""
-    if provider.koku_uuid:
+    if provider.source_type in (Provider.PROVIDER_GCP, Provider.PROVIDER_GCP_LOCAL,):
         screen_fn = APP_SETTINGS_SCREEN_MAP.get(provider.source_type)
         return screen_fn(provider)
+    else:
+        if provider.koku_uuid:
+            screen_fn = APP_SETTINGS_SCREEN_MAP.get(provider.source_type)
+            return screen_fn(provider)
     return False
 
 

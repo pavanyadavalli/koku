@@ -48,7 +48,9 @@ class SourceStatus:
         self.user = request.user
         self.source_id = source_id
         self.source = Sources.objects.get(source_id=source_id)
+        LOG.info(f"FOund source: {str(self.source)}")
         if not source_settings_complete(self.source):
+            LOG.info("SETTINGS NOT READY")
             raise ObjectDoesNotExist(f"Source ID: {self.source_id} not ready for status")
         self.sources_client = SourcesHTTPClient(self.source.auth_header, source_id=source_id)
 
@@ -153,6 +155,7 @@ def source_status(request):
         source_status_obj = SourceStatus(request, source_id)
     except ObjectDoesNotExist:
         # Source isn't in our database, return 404.
+        LOG.info("Returning 404 in source_status")
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     return _deliver_status(request, source_status_obj)

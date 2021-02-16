@@ -56,6 +56,8 @@ def create_parser():
     )
     provider_group.add_argument("--aws", dest="aws", action="store_true", help="Create an AWS source.")
     provider_group.add_argument("--ocp", dest="ocp", action="store_true", help="Create an OCP source.")
+    provider_group.add_argument("--busy", dest="busy", action="store_true", help="Create an OCP source.")
+
     provider_group.add_argument("--azure", dest="azure", action="store_true", help="Create an AZURE source.")
 
     return parser
@@ -207,6 +209,17 @@ def main(args):  # noqa
         application_id = generator.create_application(app_create_source_id, "/insights/platform/cost-management")
         print(f"Attached Cost Management Application ID {application_id} to Source ID {app_create_source_id}")
         return
+
+    if parameters.get("busy"):
+        import time
+        source_num = 0
+        while True:
+            time.sleep(4)
+            name = f"ocp_source_{source_num}"
+            cluster_id = f"cluster-{source_num}"
+            source_id = generator.create_source(name, "openshift", cluster_id)
+            application_id = generator.create_application(source_id, "/insights/platform/cost-management")
+            source_num = source_num + 1
 
     if parameters.get("aws"):
         role_arn = parameters.get("role_arn")

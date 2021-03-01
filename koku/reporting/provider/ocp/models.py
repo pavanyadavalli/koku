@@ -22,6 +22,8 @@ from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django.db.models import JSONField
+from django_cte import CTEManager
+
 
 PRESTO_LINE_ITEM_TABLE_MAP = {
     "pod_usage": "openshift_pod_usage_line_items",
@@ -207,6 +209,8 @@ class OCPUsageLineItemDailySummary(models.Model):
     This table is aggregated by OCP resource.
 
     """
+
+    objects = CTEManager()
 
     MONTHLY_COST_TYPES = (("Node", "Node"), ("Cluster", "Cluster"), ("PVC", "PVC"))
     MONTHLY_COST_RATE_MAP = {

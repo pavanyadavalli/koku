@@ -126,11 +126,18 @@ class OCPReportQueryHandler(ReportQueryHandler):
             query_order_by = ["-date"]
             query_order_by.extend([self.order])
 
+            rank_by_total = self.get_rank_window_function(group_by_value)
+            rank_order_term = self.order.replace("-", "")
+            rank_annotations = {rank_order_term: self.report_annotations[rank_order_term]}
+            ranks = query_data.values(*group_by_value).annotate(**rank_annotations).annotate(rank=rank_by_total)
+            rank_dict = {rank.get("project"): rank.get("rank") for rank in ranks}
+            LOG.info(rank_dict)
+
             query_data = query_data.values(*query_group_by).annotate(**self.report_annotations)
 
             if self._limit and group_by_value:
-                rank_by_total = self.get_rank_window_function(group_by_value)
-                query_data = query_data.annotate(rank=rank_by_total)
+                # rank_by_total = self.get_rank_window_function(group_by_value)
+                # query_data = query_data.annotate(rank=rank_by_total)
                 query_order_by.insert(1, "rank")
                 query_data = self._ranked_list(query_data)
 
@@ -181,7 +188,8 @@ class OCPReportQueryHandler(ReportQueryHandler):
         """Generate a limit ranking window function."""
         tag_column = self._mapper.tag_column
         rank_orders = []
-        rank_field = group_by_value.pop()
+        if group_by_value:
+            rank_field = group_by_value[0]
         default_ordering = self._mapper.report_type_map.get("default_ordering")
 
         if self.order_field == "delta" and "__" in self._delta:
@@ -191,10 +199,11 @@ class OCPReportQueryHandler(ReportQueryHandler):
             rank_orders.append(getattr(F(self.order_field), self.order_direction)())
         if tag_column in rank_field:
             rank_orders.append(self.get_tag_order_by(rank_field))
-        else:
-            rank_orders.append(getattr(F(rank_field), self.order_direction)())
-
-        return Window(expression=RowNumber(), partition_by=F("date"), order_by=rank_orders)
+        # else:
+        #     rank_orders.append(getattr(F(rank_field), self.order_direction)())
+        # LOG.info(rank_orders)
+        rank_by_total = Window(expression=RowNumber(), order_by=rank_orders)
+        return rank_by_total
 
     def get_cluster_capacity(self, query_data):  # noqa: C901
         """Calculate cluster capacity for all nodes over the date range."""

@@ -387,10 +387,10 @@ class GCPReportProcessor(ReportProcessorBase):
                 )
                 self._save_to_db(temp_table, report_db)
                 row_count += len(self.processed_report.line_items)
-                report_db.merge_temp_table(self.line_item_table_name, temp_table, self.line_item_columns)
 
             self._update_mappings()
 
+            report_db.merge_temp_table(self.line_item_table_name, temp_table, self.line_item_columns)
             LOG.info("Completed report processing for file: %s and schema: %s", self._report_name, self._schema)
 
             if not settings.DEVELOPMENT:

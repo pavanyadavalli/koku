@@ -1,24 +1,23 @@
--- The Python Jinja string variable subsitutions azure_where_clause and ocp_where_clause
--- optionally filter azure and OCP data by provider/source
--- Ex azure_where_clause: 'AND cost_entry_bill_id IN (1, 2, 3)'
--- Ex ocp_where_clause: "AND cluster_id = 'abcd-1234`"
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__matched_tags_{{uuid | sqlsafe}};
-CREATE TABLE hive.{{schema | sqlsafe}}.__matched_tags_{{uuid | sqlsafe}} AS (
-    WITH cte_unnested_azure_tags AS (
+-- {{schema | sqlsafe}}
+-- {{uuid | sqlsafe}}
+
+DROP TABLE IF EXISTS hive.acct10001.__matched_tags_00000000_0000_0000_0000_000000000000;
+CREATE TABLE hive.acct10001.__matched_tags_00000000_0000_0000_0000_000000000000 AS (
+    WITH cte_unnested_gcp_tags AS (
         SELECT tags.*,
             b.billing_period_start
         FROM (
             SELECT key,
                 value,
                 cost_entry_bill_id
-            FROM postgres.{{schema | sqlsafe}}.reporting_azuretags_summary AS ts
+            FROM postgres.acct10001.reporting_gcptags_summary AS ts
             CROSS JOIN UNNEST("values") AS v(value)
         ) AS tags
-        JOIN postgres.{{schema | sqlsafe}}.reporting_azurecostentrybill AS b
+        JOIN postgres.acct10001.reporting_gcpcostentrybill AS b
             ON tags.cost_entry_bill_id = b.id
-        JOIN postgres.{{schema | sqlsafe}}.reporting_azureenabledtagkeys as enabled_tags
+        JOIN postgres.acct10001.reporting_gcpenabledtagkeys as enabled_tags
             ON lower(enabled_tags.key) = lower(tags.key)
-        WHERE b.id = {{bill_id}}
+        WHERE b.id = 3 -- {{bill_id}}
     ),
     cte_unnested_ocp_pod_tags AS (
         SELECT tags.*,
@@ -29,15 +28,15 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__matched_tags_{{uuid | sqlsafe}} AS (
             SELECT key,
                 value,
                 report_period_id
-            FROM postgres.{{schema | sqlsafe}}.reporting_ocpusagepodlabel_summary AS ts
+            FROM postgres.acct10001.reporting_ocpusagepodlabel_summary AS ts
             CROSS JOIN UNNEST("values") AS v(value)
         ) AS tags
-        JOIN postgres.{{schema | sqlsafe}}.reporting_ocpusagereportperiod AS rp
+        JOIN postgres.acct10001.reporting_ocpusagereportperiod AS rp
             ON tags.report_period_id = rp.id
         -- Filter out tags that aren't enabled
-        JOIN postgres.{{schema | sqlsafe}}.reporting_ocpenabledtagkeys as enabled_tags
+        JOIN postgres.acct10001.reporting_ocpenabledtagkeys as enabled_tags
             ON lower(enabled_tags.key) = lower(tags.key)
-        WHERE rp.cluster_id = {{cluster_id}}
+        WHERE rp.cluster_id = 'my-ocp-cluster-gcp1' -- {{cluster_id}}
     ),
     cte_unnested_ocp_volume_tags AS (
         SELECT tags.*,
@@ -48,15 +47,15 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__matched_tags_{{uuid | sqlsafe}} AS (
             SELECT key,
                 value,
                 report_period_id
-            FROM postgres.{{schema | sqlsafe}}.reporting_ocpstoragevolumelabel_summary AS ts
+            FROM postgres.acct10001.reporting_ocpstoragevolumelabel_summary AS ts
             CROSS JOIN UNNEST("values") AS v(value)
         ) AS tags
-        JOIN postgres.{{schema | sqlsafe}}.reporting_ocpusagereportperiod AS rp
+        JOIN postgres.acct10001.reporting_ocpusagereportperiod AS rp
             ON tags.report_period_id = rp.id
         -- Filter out tags that aren't enabled
-        JOIN postgres.{{schema | sqlsafe}}.reporting_ocpenabledtagkeys as enabled_tags
+        JOIN postgres.acct10001.reporting_ocpenabledtagkeys as enabled_tags
             ON lower(enabled_tags.key) = lower(tags.key)
-        WHERE rp.cluster_id = {{cluster_id}}
+        WHERE rp.cluster_id = 'my-ocp-cluster-gcp1' -- {{cluster_id}}
     )
     SELECT '{"' || key || '": "' || value || '"}' as tag,
         key,
@@ -64,39 +63,39 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__matched_tags_{{uuid | sqlsafe}} AS (
         cost_entry_bill_id,
         report_period_id
     FROM (
-        SELECT azure.key,
-            azure.value,
-            azure.cost_entry_bill_id,
+        SELECT gcp.key,
+            gcp.value,
+            gcp.cost_entry_bill_id,
             ocp.report_period_id
-        FROM cte_unnested_azure_tags AS azure
+        FROM cte_unnested_gcp_tags AS gcp
         JOIN cte_unnested_ocp_pod_tags AS ocp
-            ON lower(azure.key) = lower(ocp.key)
-                AND lower(azure.value) = lower(ocp.value)
-                AND azure.billing_period_start = ocp.report_period_start
+            ON lower(gcp.key) = lower(ocp.key)
+                AND lower(gcp.value) = lower(ocp.value)
+                AND gcp.billing_period_start = ocp.report_period_start
 
         UNION
 
-        SELECT azure.key,
-            azure.value,
-            azure.cost_entry_bill_id,
+        SELECT gcp.key,
+            gcp.value,
+            gcp.cost_entry_bill_id,
             ocp.report_period_id
-        FROM cte_unnested_azure_tags AS azure
+        FROM cte_unnested_gcp_tags AS gcp
         JOIN cte_unnested_ocp_volume_tags AS ocp
-            ON lower(azure.key) = lower(ocp.key)
-                AND lower(azure.value) = lower(ocp.value)
-                AND azure.billing_period_start = ocp.report_period_start
+            ON lower(gcp.key) = lower(ocp.key)
+                AND lower(gcp.value) = lower(ocp.value)
+                AND gcp.billing_period_start = ocp.report_period_start
     ) AS matches
 )
 ;
 
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_azure_daily_{{uuid | sqlsafe}};
-CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_azure_daily_{{uuid | sqlsafe}} AS (
+DROP TABLE IF EXISTS hive.acct10001.__reporting_gcp_daily_00000000_0000_0000_0000_000000000000;
+CREATE TABLE hive.acct10001.__reporting_gcp_daily_00000000_0000_0000_0000_000000000000 AS (
     WITH cte_line_items AS (
         SELECT {{bill_id | sqlsafe}} as cost_entry_bill_id,
             cast(uuid() as varchar) as line_item_id,
             date(coalesce(date, usagedatetime)) as usage_date,
             coalesce(subscriptionid, subscriptionguid) as subscription_guid,
-            json_extract_scalar(json_parse(azure.additionalinfo), '$.ServiceType') as instance_type,
+            json_extract_scalar(json_parse(gcp.additionalinfo), '$.ServiceType') as instance_type,
             coalesce(servicename, metercategory) as service_name,
             resourcelocation as resource_location,
             split_part(coalesce(resourceid, instanceid), '/', 9) as resource_id,
@@ -119,49 +118,49 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_azure_daily_{{uuid | sqlsafe}
             END as unit_of_measure,
             tags,
             lower(tags) as lower_tags
-        FROM hive.{{schema | sqlsafe}}.azure_line_items as azure
-        WHERE azure.source = '{{azure_source_uuid | sqlsafe}}'
-            AND azure.year = '{{year | sqlsafe}}'
-            AND azure.month = '{{month | sqlsafe}}'
-            AND date(coalesce(date, usagedatetime)) >= date('{{start_date | sqlsafe}}')
-            AND date(coalesce(date, usagedatetime)) <= date('{{end_date | sqlsafe}}')
+        FROM hive.acct10001.gcp_line_items as gcp
+        WHERE gcp.source = '4963ab4d-a830-4226-ba3c-faeb9cf76f3e' -- '{{gcp_source_uuid | sqlsafe}}'
+            AND gcp.year = '2021' -- '{{year | sqlsafe}}'
+            AND gcp.month = '03' -- '{{month | sqlsafe}}'
+            AND date(coalesce(date, usagedatetime)) >= date('2021-03-01'::timestamp) -- date('{{start_date | sqlsafe}}')
+            AND date(coalesce(date, usagedatetime)) <= date('2021-04-01'::timestamp) -- date('{{end_date | sqlsafe}}')
     )
-    SELECT azure.cost_entry_bill_id,
-        azure.line_item_id,
-        azure.usage_date,
-        azure.subscription_guid,
-        azure.instance_type,
-        azure.service_name,
-        azure.resource_location,
-        azure.resource_id,
-        azure.usage_quantity * azure.multiplier as usage_quantity,
-        azure.pretax_cost,
-        azure.currency,
-        azure.unit_of_measure,
-        azure.tags,
-        azure.lower_tags
-    FROM cte_line_items AS azure
+    SELECT gcp.cost_entry_bill_id,
+        gcp.line_item_id,
+        gcp.usage_date,
+        gcp.subscription_guid,
+        gcp.instance_type,
+        gcp.service_name,
+        gcp.resource_location,
+        gcp.resource_id,
+        gcp.usage_quantity * gcp.multiplier as usage_quantity,
+        gcp.pretax_cost,
+        gcp.currency,
+        gcp.unit_of_measure,
+        gcp.tags,
+        gcp.lower_tags
+    FROM cte_line_items AS gcp
 )
 ;
 
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_azure_tags_{{uuid | sqlsafe}};
-CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_azure_tags_{{uuid | sqlsafe}} AS (
-    SELECT azure.*
+DROP TABLE IF EXISTS hive.acct10001.__reporting_gcp_tags_00000000_0000_0000_0000_000000000000;
+CREATE TABLE hive.acct10001.__reporting_gcp_tags_00000000_0000_0000_0000_000000000000 AS (
+    SELECT gcp.*
     FROM (
-        SELECT azure.*,
-            row_number() OVER (PARTITION BY azure.line_item_id ORDER BY azure.line_item_id) as row_number
-        FROM hive.{{schema | sqlsafe}}.__reporting_azure_daily_{{uuid | sqlsafe}} as azure
-        JOIN hive.{{schema | sqlsafe}}.__matched_tags_{{uuid | sqlsafe}} as tag
-            ON json_extract_scalar(azure.tags, '$.' || tag.key) = tag.value
-    ) AS azure
-    WHERE azure.row_number = 1
+        SELECT gcp.*,
+            row_number() OVER (PARTITION BY gcp.line_item_id ORDER BY gcp.line_item_id) as row_number
+        FROM hive.acct10001.__reporting_gcp_daily_00000000_0000_0000_0000_000000000000 as gcp
+        JOIN hive.acct10001.__matched_tags_00000000_0000_0000_0000_000000000000 as tag
+            ON json_extract_scalar(gcp.tags, '$.' || tag.key) = tag.value
+    ) AS gcp
+    WHERE gcp.row_number = 1
 )
 ;
 
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_azure_special_case_tags_{{uuid | sqlsafe}};
-CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_azure_special_case_tags_{{uuid | sqlsafe}} AS (
-    SELECT azure.*
-    FROM hive.{{schema | sqlsafe}}.__reporting_azure_daily_{{uuid | sqlsafe}} as azure
+DROP TABLE IF EXISTS hive.acct10001.__reporting_gcp_special_case_tags_00000000_0000_0000_0000_000000000000;
+CREATE TABLE hive.acct10001.__reporting_gcp_special_case_tags_00000000_0000_0000_0000_000000000000 AS (
+    SELECT gcp.*
+    FROM hive.acct10001.__reporting_gcp_daily_00000000_0000_0000_0000_000000000000 as gcp
     WHERE (
         strpos(lower_tags, 'openshift_cluster') != 0
         OR strpos(lower_tags, 'openshift_node') != 0
@@ -170,8 +169,8 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_azure_special_case_tags_{{uui
 )
 ;
 
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_ocp_storage_tags_{{uuid | sqlsafe}};
-CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocp_storage_tags_{{uuid | sqlsafe}} AS (
+DROP TABLE IF EXISTS hive.acct10001.__reporting_ocp_storage_tags_00000000_0000_0000_0000_000000000000;
+CREATE TABLE hive.acct10001.__reporting_ocp_storage_tags_00000000_0000_0000_0000_000000000000 AS (
     SELECT cast(ocp.uuid AS VARCHAR) AS ocp_id,
         ocp.usage_start,
         ocp.report_period_id,
@@ -190,19 +189,19 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocp_storage_tags_{{uuid | sql
         lower(tag.key) as key,
         lower(tag.value) as value,
         lower(tag.tag) as tag
-    FROM postgres.{{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary as ocp
-    JOIN hive.{{schema | sqlsafe}}.__matched_tags_{{uuid | sqlsafe}} AS tag
+    FROM postgres.acct10001.reporting_ocpusagelineitem_daily_summary as ocp
+    JOIN hive.acct10001.__matched_tags_00000000_0000_0000_0000_000000000000 AS tag
         ON ocp.report_period_id = tag.report_period_id
         AND json_extract_scalar(ocp.volume_labels, '$.' || tag.key) = tag.value
     WHERE ocp.source_uuid = UUID '{{ocp_source_uuid | sqlsafe}}'
         AND ocp.data_source = 'Storage'
-        AND date(ocp.usage_start) >= date('{{start_date | sqlsafe}}')
-        AND date(ocp.usage_start) <= date('{{end_date | sqlsafe}}')
+        AND date(ocp.usage_start) >= date('2021-03-01'::timestamp) -- date('{{start_date | sqlsafe}}')
+        AND date(ocp.usage_start) <= date('2021-04-01'::timestamp) -- date('{{end_date | sqlsafe}}')
 )
 ;
 
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_ocp_pod_tags_{{uuid | sqlsafe}};
-CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocp_pod_tags_{{uuid | sqlsafe}} AS (
+DROP TABLE IF EXISTS hive.acct10001.__reporting_ocp_pod_tags_00000000_0000_0000_0000_000000000000;
+CREATE TABLE hive.acct10001.__reporting_ocp_pod_tags_00000000_0000_0000_0000_000000000000 AS (
     SELECT cast(ocp.uuid AS VARCHAR) AS ocp_id,
         ocp.usage_start,
         ocp.report_period_id,
@@ -225,23 +224,23 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocp_pod_tags_{{uuid | sqlsafe
         lower(tag.key) as key,
         lower(tag.value) as value,
         lower(tag.tag) as tag
-    FROM postgres.{{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary as ocp
-    JOIN hive.{{schema | sqlsafe}}.__matched_tags_{{uuid | sqlsafe}} AS tag
+    FROM postgres.acct10001.reporting_ocpusagelineitem_daily_summary as ocp
+    JOIN hive.acct10001.__matched_tags_00000000_0000_0000_0000_000000000000 AS tag
         ON ocp.report_period_id = tag.report_period_id
         AND json_extract_scalar(ocp.pod_labels, '$.' || tag.key) = tag.value
     WHERE ocp.source_uuid = UUID '{{ocp_source_uuid | sqlsafe}}'
         AND ocp.data_source = 'Pod'
-        AND date(ocp.usage_start) >= date('{{start_date | sqlsafe}}')
-        AND date(ocp.usage_start) <= date('{{end_date | sqlsafe}}')
+        AND date(ocp.usage_start) >= date('2021-03-01'::timestamp) -- date('{{start_date | sqlsafe}}')
+        AND date(ocp.usage_start) <= date('2021-04-01'::timestamp) -- date('{{end_date | sqlsafe}}')
 )
 ;
 
 
 
--- First we match OCP pod data to azure data using a direct
--- resource id match. This usually means OCP node -> azure EC2 instance ID.
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}};
-CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} AS (
+-- First we match OCP pod data to gcp data using a direct
+-- resource id match. This usually means OCP node -> gcp EC2 instance ID.
+DROP TABLE IF EXISTS hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000;
+CREATE TABLE hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 AS (
     WITH cte_resource_id_matched AS (
         SELECT cast(ocp.uuid AS VARCHAR) AS ocp_id,
             ocp.report_period_id,
@@ -261,51 +260,51 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{
             ocp.node_capacity_memory_gigabyte_hours,
             ocp.cluster_capacity_cpu_core_hours,
             ocp.cluster_capacity_memory_gigabyte_hours,
-            azure.cost_entry_bill_id,
-            azure.line_item_id as azure_id,
-            azure.usage_date,
-            azure.subscription_guid,
-            azure.instance_type,
-            azure.service_name,
-            azure.resource_location,
-            azure.resource_id,
-            azure.usage_quantity,
-            azure.pretax_cost,
-            azure.currency,
-            azure.unit_of_measure,
-            azure.tags
-        FROM hive.{{schema | sqlsafe}}.__reporting_azure_daily_{{uuid | sqlsafe}} as azure
-        JOIN postgres.{{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary as ocp
+            gcp.cost_entry_bill_id,
+            gcp.line_item_id as gcp_id,
+            gcp.usage_date,
+            gcp.subscription_guid,
+            gcp.instance_type,
+            gcp.service_name,
+            gcp.resource_location,
+            gcp.resource_id,
+            gcp.usage_quantity,
+            gcp.pretax_cost,
+            gcp.currency,
+            gcp.unit_of_measure,
+            gcp.tags
+        FROM hive.acct10001.__reporting_gcp_daily_00000000_0000_0000_0000_000000000000 as gcp
+        JOIN postgres.acct10001.reporting_ocpusagelineitem_daily_summary as ocp
             -- NOTE: We would normally use ocp.resource_id
             -- For this JOIN, but it is not guaranteed to be correct
             -- in the current Operator Metering version
             -- so we are matching only on the node name
-            -- which should match the split Azure instance ID
-            ON azure.resource_id = ocp.node
-                AND azure.usage_date = ocp.usage_start
+            -- which should match the split gcp instance ID
+            ON gcp.resource_id = ocp.node
+                AND gcp.usage_date = ocp.usage_start
         WHERE ocp.source_uuid = UUID '{{ocp_source_uuid | sqlsafe}}'
-            AND ocp.usage_start >= date('{{start_date | sqlsafe}}')
-            AND ocp.usage_start <= date('{{end_date | sqlsafe}}')
+            AND ocp.usage_start >= date('2021-03-01'::timestamp) -- date('{{start_date | sqlsafe}}')
+            AND ocp.usage_start <= date('2021-04-01'::timestamp) -- date('{{end_date | sqlsafe}}')
             AND ocp.data_source = 'Pod'
     ),
     cte_number_of_shared AS (
-        SELECT azure_id,
+        SELECT gcp_id,
             count(DISTINCT namespace) as shared_projects
         FROM cte_resource_id_matched
-        GROUP BY azure_id
+        GROUP BY gcp_id
     )
     SELECT rm.*,
         (rm.pod_usage_cpu_core_hours / rm.node_capacity_cpu_core_hours) * rm.pretax_cost as project_cost,
         shared.shared_projects
     FROM cte_resource_id_matched AS rm
     JOIN cte_number_of_shared AS shared
-        ON rm.azure_id = shared.azure_id
+        ON rm.gcp_id = shared.gcp_id
 )
 ;
 
--- Next we match where the azure tag is the special openshift_project key
+-- Next we match where the gcp tag is the special openshift_project key
 -- and the value matches an OpenShift project name
-INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}}
+INSERT INTO hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000
     WITH cte_tag_matched AS (
         SELECT cast(ocp.uuid AS VARCHAR) AS ocp_id,
             ocp.report_period_id,
@@ -325,47 +324,47 @@ INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{
             ocp.node_capacity_memory_gigabyte_hours,
             ocp.cluster_capacity_cpu_core_hours,
             ocp.cluster_capacity_memory_gigabyte_hours,
-            azure.cost_entry_bill_id,
-            azure.line_item_id as azure_id,
-            azure.usage_date,
-            azure.subscription_guid,
-            azure.instance_type,
-            azure.service_name,
-            azure.resource_location,
-            azure.resource_id,
-            azure.usage_quantity,
-            azure.pretax_cost,
-            azure.currency,
-            azure.unit_of_measure,
-            azure.tags
-        FROM hive.{{schema | sqlsafe}}.__reporting_azure_special_case_tags_{{uuid | sqlsafe}} as azure
-        JOIN postgres.{{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary as ocp
-            ON json_extract_scalar(azure.lower_tags, '$.openshift_project') = lower(ocp.namespace)
-                AND azure.usage_date = ocp.usage_start
+            gcp.cost_entry_bill_id,
+            gcp.line_item_id as gcp_id,
+            gcp.usage_date,
+            gcp.subscription_guid,
+            gcp.instance_type,
+            gcp.service_name,
+            gcp.resource_location,
+            gcp.resource_id,
+            gcp.usage_quantity,
+            gcp.pretax_cost,
+            gcp.currency,
+            gcp.unit_of_measure,
+            gcp.tags
+        FROM hive.acct10001.__reporting_gcp_special_case_tags_00000000_0000_0000_0000_000000000000 as gcp
+        JOIN postgres.acct10001.reporting_ocpusagelineitem_daily_summary as ocp
+            ON json_extract_scalar(gcp.lower_tags, '$.openshift_project') = lower(ocp.namespace)
+                AND gcp.usage_date = ocp.usage_start
         -- ANTI JOIN to remove rows that already matched
-        LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} AS rm
-            ON rm.azure_id = azure.line_item_id
+        LEFT JOIN hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 AS rm
+            ON rm.gcp_id = gcp.line_item_id
         WHERE ocp.source_uuid = UUID '{{ocp_source_uuid | sqlsafe}}'
             AND ocp.data_source = 'Pod'
-            AND rm.azure_id IS NULL
+            AND rm.gcp_id IS NULL
     ),
     cte_number_of_shared AS (
-        SELECT azure_id,
+        SELECT gcp_id,
             count(DISTINCT namespace) as shared_projects
         FROM cte_tag_matched
-        GROUP BY azure_id
+        GROUP BY gcp_id
     )
     SELECT tm.*,
         tm.pretax_cost / shared.shared_projects as project_cost,
         shared.shared_projects
     FROM cte_tag_matched AS tm
     JOIN cte_number_of_shared AS shared
-        ON tm.azure_id = shared.azure_id
+        ON tm.gcp_id = shared.gcp_id
 ;
 
--- Next we match where the azure tag is the special openshift_node key
+-- Next we match where the gcp tag is the special openshift_node key
 -- and the value matches an OpenShift node name
-INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}}
+INSERT INTO hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000
     WITH cte_tag_matched AS (
         SELECT cast(ocp.uuid AS VARCHAR) AS ocp_id,
             ocp.report_period_id,
@@ -385,47 +384,47 @@ INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{
             ocp.node_capacity_memory_gigabyte_hours,
             ocp.cluster_capacity_cpu_core_hours,
             ocp.cluster_capacity_memory_gigabyte_hours,
-            azure.cost_entry_bill_id,
-            azure.line_item_id as azure_id,
-            azure.usage_date,
-            azure.subscription_guid,
-            azure.instance_type,
-            azure.service_name,
-            azure.resource_location,
-            azure.resource_id,
-            azure.usage_quantity,
-            azure.pretax_cost,
-            azure.currency,
-            azure.unit_of_measure,
-            azure.tags
-        FROM hive.{{schema | sqlsafe}}.__reporting_azure_special_case_tags_{{uuid | sqlsafe}} as azure
-        JOIN postgres.{{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary as ocp
-            ON json_extract_scalar(azure.lower_tags, '$.openshift_node') = lower(ocp.node)
-                AND azure.usage_date = ocp.usage_start
+            gcp.cost_entry_bill_id,
+            gcp.line_item_id as gcp_id,
+            gcp.usage_date,
+            gcp.subscription_guid,
+            gcp.instance_type,
+            gcp.service_name,
+            gcp.resource_location,
+            gcp.resource_id,
+            gcp.usage_quantity,
+            gcp.pretax_cost,
+            gcp.currency,
+            gcp.unit_of_measure,
+            gcp.tags
+        FROM hive.acct10001.__reporting_gcp_special_case_tags_00000000_0000_0000_0000_000000000000 as gcp
+        JOIN postgres.acct10001.reporting_ocpusagelineitem_daily_summary as ocp
+            ON json_extract_scalar(gcp.lower_tags, '$.openshift_node') = lower(ocp.node)
+                AND gcp.usage_date = ocp.usage_start
         -- ANTI JOIN to remove rows that already matched
-        LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} AS rm
-            ON rm.azure_id = azure.line_item_id
+        LEFT JOIN hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 AS rm
+            ON rm.gcp_id = gcp.line_item_id
         WHERE ocp.source_uuid = UUID '{{ocp_source_uuid | sqlsafe}}'
             AND ocp.data_source = 'Pod'
-            AND rm.azure_id IS NULL
+            AND rm.gcp_id IS NULL
     ),
     cte_number_of_shared AS (
-        SELECT azure_id,
+        SELECT gcp_id,
             count(DISTINCT namespace) as shared_projects
         FROM cte_tag_matched
-        GROUP BY azure_id
+        GROUP BY gcp_id
     )
     SELECT tm.*,
         tm.pretax_cost / shared.shared_projects as project_cost,
         shared.shared_projects
     FROM cte_tag_matched AS tm
     JOIN cte_number_of_shared AS shared
-        ON tm.azure_id = shared.azure_id
+        ON tm.gcp_id = shared.gcp_id
 ;
 
--- Next we match where the azure tag is the special openshift_cluster key
+-- Next we match where the gcp tag is the special openshift_cluster key
 -- and the value matches an OpenShift cluster name
- INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}}
+ INSERT INTO hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000
     WITH cte_tag_matched AS (
         SELECT cast(ocp.uuid AS VARCHAR) AS ocp_id,
             ocp.report_period_id,
@@ -445,47 +444,47 @@ INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{
             ocp.node_capacity_memory_gigabyte_hours,
             ocp.cluster_capacity_cpu_core_hours,
             ocp.cluster_capacity_memory_gigabyte_hours,
-            azure.cost_entry_bill_id,
-            azure.line_item_id as azure_id,
-            azure.usage_date,
-            azure.subscription_guid,
-            azure.instance_type,
-            azure.service_name,
-            azure.resource_location,
-            azure.resource_id,
-            azure.usage_quantity,
-            azure.pretax_cost,
-            azure.currency,
-            azure.unit_of_measure,
-            azure.tags
-        FROM hive.{{schema | sqlsafe}}.__reporting_azure_special_case_tags_{{uuid | sqlsafe}} as azure
-        JOIN postgres.{{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary as ocp
-            ON json_extract_scalar(azure.lower_tags, '$.openshift_cluster') IN (lower(ocp.cluster_id), lower(ocp.cluster_alias))
-                AND azure.usage_date = ocp.usage_start
+            gcp.cost_entry_bill_id,
+            gcp.line_item_id as gcp_id,
+            gcp.usage_date,
+            gcp.subscription_guid,
+            gcp.instance_type,
+            gcp.service_name,
+            gcp.resource_location,
+            gcp.resource_id,
+            gcp.usage_quantity,
+            gcp.pretax_cost,
+            gcp.currency,
+            gcp.unit_of_measure,
+            gcp.tags
+        FROM hive.acct10001.__reporting_gcp_special_case_tags_00000000_0000_0000_0000_000000000000 as gcp
+        JOIN postgres.acct10001.reporting_ocpusagelineitem_daily_summary as ocp
+            ON json_extract_scalar(gcp.lower_tags, '$.openshift_cluster') IN (lower(ocp.cluster_id), lower(ocp.cluster_alias))
+                AND gcp.usage_date = ocp.usage_start
         -- ANTI JOIN to remove rows that already matched
-        LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} AS rm
-            ON rm.azure_id = azure.line_item_id
+        LEFT JOIN hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 AS rm
+            ON rm.gcp_id = gcp.line_item_id
         WHERE ocp.source_uuid = UUID '{{ocp_source_uuid | sqlsafe}}'
             AND ocp.data_source = 'Pod'
-            AND rm.azure_id IS NULL
+            AND rm.gcp_id IS NULL
     ),
     cte_number_of_shared AS (
-        SELECT azure_id,
+        SELECT gcp_id,
             count(DISTINCT namespace) as shared_projects
         FROM cte_tag_matched
-        GROUP BY azure_id
+        GROUP BY gcp_id
     )
     SELECT tm.*,
         tm.pretax_cost / shared.shared_projects as project_cost,
         shared.shared_projects
     FROM cte_tag_matched AS tm
     JOIN cte_number_of_shared AS shared
-        ON tm.azure_id = shared.azure_id
+        ON tm.gcp_id = shared.gcp_id
 ;
 
 -- Next we match where the pod label key and value
--- and azure tag key and value match directly
- INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}}
+-- and gcp tag key and value match directly
+ INSERT INTO hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000
     WITH cte_tag_matched AS (
         SELECT ocp.ocp_id,
             ocp.report_period_id,
@@ -505,48 +504,48 @@ INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{
             ocp.node_capacity_memory_gigabyte_hours,
             ocp.cluster_capacity_cpu_core_hours,
             ocp.cluster_capacity_memory_gigabyte_hours,
-            azure.cost_entry_bill_id,
-            azure.line_item_id as azure_id,
-            azure.usage_date,
-            azure.subscription_guid,
-            azure.instance_type,
-            azure.service_name,
-            azure.resource_location,
-            azure.resource_id,
-            azure.usage_quantity,
-            azure.pretax_cost,
-            azure.currency,
-            azure.unit_of_measure,
-            azure.tags
-        FROM hive.{{schema | sqlsafe}}.__reporting_azure_tags_{{uuid | sqlsafe}} as azure
-        JOIN hive.{{schema | sqlsafe}}.__reporting_ocp_pod_tags_{{uuid | sqlsafe}} as ocp
-            ON azure.usage_date = ocp.usage_start
-                AND strpos(azure.lower_tags, ocp.tag) != 0
+            gcp.cost_entry_bill_id,
+            gcp.line_item_id as gcp_id,
+            gcp.usage_date,
+            gcp.subscription_guid,
+            gcp.instance_type,
+            gcp.service_name,
+            gcp.resource_location,
+            gcp.resource_id,
+            gcp.usage_quantity,
+            gcp.pretax_cost,
+            gcp.currency,
+            gcp.unit_of_measure,
+            gcp.tags
+        FROM hive.acct10001.__reporting_gcp_tags_00000000_0000_0000_0000_000000000000 as gcp
+        JOIN hive.acct10001.__reporting_ocp_pod_tags_00000000_0000_0000_0000_000000000000 as ocp
+            ON gcp.usage_date = ocp.usage_start
+                AND strpos(gcp.lower_tags, ocp.tag) != 0
         -- ANTI JOIN to remove rows that already matched
-        LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} AS rm
-            ON rm.azure_id = azure.line_item_id
-        WHERE rm.azure_id IS NULL
+        LEFT JOIN hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 AS rm
+            ON rm.gcp_id = gcp.line_item_id
+        WHERE rm.gcp_id IS NULL
     ),
     cte_number_of_shared AS (
-        SELECT azure_id,
+        SELECT gcp_id,
             count(DISTINCT namespace) as shared_projects
         FROM cte_tag_matched
-        GROUP BY azure_id
+        GROUP BY gcp_id
     )
     SELECT tm.*,
         tm.pretax_cost / shared.shared_projects as project_cost,
         shared.shared_projects
     FROM cte_tag_matched AS tm
     JOIN cte_number_of_shared AS shared
-        ON tm.azure_id = shared.azure_id
+        ON tm.gcp_id = shared.gcp_id
 ;
 
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_ocp_pod_tags_{{uuid | sqlsafe}};
+DROP TABLE IF EXISTS hive.acct10001.__reporting_ocp_pod_tags_00000000_0000_0000_0000_000000000000;
 
--- First we match OCP storage data to Azure data using a direct
--- resource id match. OCP PVC name -> Azure instance ID.
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}};
-CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}} AS (
+-- First we match OCP storage data to gcp data using a direct
+-- resource id match. OCP PVC name -> gcp instance ID.
+DROP TABLE IF EXISTS hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000;
+CREATE TABLE hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000 AS (
     WITH cte_tag_matched AS (
         SELECT cast(ocp.uuid AS VARCHAR) AS ocp_id,
             ocp.report_period_id,
@@ -562,51 +561,51 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily
             ocp.volume_request_storage_gigabyte_months,
             ocp.persistentvolumeclaim_usage_gigabyte_months,
             json_format(ocp.volume_labels) as volume_labels,
-            azure.cost_entry_bill_id,
-            azure.line_item_id as azure_id,
-            azure.usage_date,
-            azure.subscription_guid,
-            azure.instance_type,
-            azure.service_name,
-            azure.resource_location,
-            azure.resource_id,
-            azure.usage_quantity,
-            azure.pretax_cost,
-            azure.currency,
-            azure.unit_of_measure,
-            azure.tags
-        FROM hive.{{schema | sqlsafe}}.__reporting_azure_daily_{{uuid | sqlsafe}} as azure
-        JOIN postgres.{{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary as ocp
-            ON azure.resource_id LIKE '%%' || ocp.persistentvolume
-                AND azure.usage_date = ocp.usage_start
+            gcp.cost_entry_bill_id,
+            gcp.line_item_id as gcp_id,
+            gcp.usage_date,
+            gcp.subscription_guid,
+            gcp.instance_type,
+            gcp.service_name,
+            gcp.resource_location,
+            gcp.resource_id,
+            gcp.usage_quantity,
+            gcp.pretax_cost,
+            gcp.currency,
+            gcp.unit_of_measure,
+            gcp.tags
+        FROM hive.acct10001.__reporting_gcp_daily_00000000_0000_0000_0000_000000000000 as gcp
+        JOIN postgres.acct10001.reporting_ocpusagelineitem_daily_summary as ocp
+            ON gcp.resource_id LIKE '%%' || ocp.persistentvolume
+                AND gcp.usage_date = ocp.usage_start
         -- ANTI JOIN to remove rows that already matched
-        LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} AS ulid
-            ON ulid.azure_id = azure.line_item_id
+        LEFT JOIN hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 AS ulid
+            ON ulid.gcp_id = gcp.line_item_id
         WHERE ocp.source_uuid = UUID '{{ocp_source_uuid | sqlsafe}}'
             AND ocp.data_source = 'Storage'
-            AND ocp.usage_start >= date('{{start_date | sqlsafe}}')
-            AND ocp.usage_start <= date('{{end_date | sqlsafe}}')
-            AND ulid.azure_id IS NULL
+            AND ocp.usage_start >= date('2021-03-01'::timestamp) -- date('{{start_date | sqlsafe}}')
+            AND ocp.usage_start <= date('2021-04-01'::timestamp) -- date('{{end_date | sqlsafe}}')
+            AND ulid.gcp_id IS NULL
     ),
     cte_number_of_shared AS (
-        SELECT azure_id,
+        SELECT gcp_id,
             count(DISTINCT namespace) as shared_projects
         FROM cte_tag_matched
-        GROUP BY azure_id
+        GROUP BY gcp_id
     )
     SELECT tm.*,
         tm.pretax_cost / shared.shared_projects as project_cost,
         shared.shared_projects
     FROM cte_tag_matched AS tm
     JOIN cte_number_of_shared AS shared
-        ON tm.azure_id = shared.azure_id
+        ON tm.gcp_id = shared.gcp_id
 )
 ;
 
 
--- Next we match where the azure tag is the special openshift_project key
+-- Next we match where the gcp tag is the special openshift_project key
 -- and the value matches an OpenShift project name
-INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}}
+INSERT INTO hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000
     WITH cte_tag_matched AS (
         SELECT cast(ocp.uuid AS VARCHAR) AS ocp_id,
             ocp.report_period_id,
@@ -622,52 +621,52 @@ INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_
             ocp.volume_request_storage_gigabyte_months,
             ocp.persistentvolumeclaim_usage_gigabyte_months,
             json_format(ocp.volume_labels) as volume_labels,
-            azure.cost_entry_bill_id,
-            azure.line_item_id as azure_id,
-            azure.usage_date,
-            azure.subscription_guid,
-            azure.instance_type,
-            azure.service_name,
-            azure.resource_location,
-            azure.resource_id,
-            azure.usage_quantity,
-            azure.pretax_cost,
-            azure.currency,
-            azure.unit_of_measure,
-            azure.tags
-        FROM hive.{{schema | sqlsafe}}.__reporting_azure_special_case_tags_{{uuid | sqlsafe}} as azure
-        JOIN postgres.{{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary as ocp
-            ON json_extract_scalar(azure.lower_tags, '$.openshift_project') = lower(ocp.namespace)
-                AND azure.usage_date = ocp.usage_start
+            gcp.cost_entry_bill_id,
+            gcp.line_item_id as gcp_id,
+            gcp.usage_date,
+            gcp.subscription_guid,
+            gcp.instance_type,
+            gcp.service_name,
+            gcp.resource_location,
+            gcp.resource_id,
+            gcp.usage_quantity,
+            gcp.pretax_cost,
+            gcp.currency,
+            gcp.unit_of_measure,
+            gcp.tags
+        FROM hive.acct10001.__reporting_gcp_special_case_tags_00000000_0000_0000_0000_000000000000 as gcp
+        JOIN postgres.acct10001.reporting_ocpusagelineitem_daily_summary as ocp
+            ON json_extract_scalar(gcp.lower_tags, '$.openshift_project') = lower(ocp.namespace)
+                AND gcp.usage_date = ocp.usage_start
         -- ANTI JOIN to remove rows that already matched
-        LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} AS ulid
-            ON ulid.azure_id = azure.line_item_id
-        LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}} AS rm
-            ON rm.azure_id = azure.line_item_id
+        LEFT JOIN hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 AS ulid
+            ON ulid.gcp_id = gcp.line_item_id
+        LEFT JOIN hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000 AS rm
+            ON rm.gcp_id = gcp.line_item_id
         WHERE ocp.source_uuid = UUID '{{ocp_source_uuid | sqlsafe}}'
             AND ocp.data_source = 'Storage'
-            AND ocp.usage_start >= date('{{start_date | sqlsafe}}')
-            AND ocp.usage_start <= date('{{end_date | sqlsafe}}')
-            AND ulid.azure_id IS NULL
-            AND rm.azure_id IS NULL
+            AND ocp.usage_start >= date('2021-03-01'::timestamp) -- date('{{start_date | sqlsafe}}')
+            AND ocp.usage_start <= date('2021-04-01'::timestamp) -- date('{{end_date | sqlsafe}}')
+            AND ulid.gcp_id IS NULL
+            AND rm.gcp_id IS NULL
     ),
     cte_number_of_shared AS (
-        SELECT azure_id,
+        SELECT gcp_id,
             count(DISTINCT namespace) as shared_projects
         FROM cte_tag_matched
-        GROUP BY azure_id
+        GROUP BY gcp_id
     )
     SELECT tm.*,
         tm.pretax_cost / shared.shared_projects as project_cost,
         shared.shared_projects
     FROM cte_tag_matched AS tm
     JOIN cte_number_of_shared AS shared
-        ON tm.azure_id = shared.azure_id
+        ON tm.gcp_id = shared.gcp_id
 ;
 
--- Next we match where the azure tag is the special openshift_node key
+-- Next we match where the gcp tag is the special openshift_node key
 -- and the value matches an OpenShift node name
-INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}}
+INSERT INTO hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000
     WITH cte_tag_matched AS (
         SELECT cast(ocp.uuid AS VARCHAR) AS ocp_id,
             ocp.report_period_id,
@@ -683,50 +682,50 @@ INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_
             ocp.volume_request_storage_gigabyte_months,
             ocp.persistentvolumeclaim_usage_gigabyte_months,
             json_format(ocp.volume_labels) as volume_labels,
-            azure.cost_entry_bill_id,
-            azure.line_item_id as azure_id,
-            azure.usage_date,
-            azure.subscription_guid,
-            azure.instance_type,
-            azure.service_name,
-            azure.resource_location,
-            azure.resource_id,
-            azure.usage_quantity,
-            azure.pretax_cost,
-            azure.currency,
-            azure.unit_of_measure,
-            azure.tags
-        FROM hive.{{schema | sqlsafe}}.__reporting_azure_special_case_tags_{{uuid | sqlsafe}} as azure
-        JOIN postgres.{{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary as ocp
-            ON json_extract_scalar(azure.lower_tags, '$.openshift_node') = lower(ocp.node)
-                AND azure.usage_date = ocp.usage_start
+            gcp.cost_entry_bill_id,
+            gcp.line_item_id as gcp_id,
+            gcp.usage_date,
+            gcp.subscription_guid,
+            gcp.instance_type,
+            gcp.service_name,
+            gcp.resource_location,
+            gcp.resource_id,
+            gcp.usage_quantity,
+            gcp.pretax_cost,
+            gcp.currency,
+            gcp.unit_of_measure,
+            gcp.tags
+        FROM hive.acct10001.__reporting_gcp_special_case_tags_00000000_0000_0000_0000_000000000000 as gcp
+        JOIN postgres.acct10001.reporting_ocpusagelineitem_daily_summary as ocp
+            ON json_extract_scalar(gcp.lower_tags, '$.openshift_node') = lower(ocp.node)
+                AND gcp.usage_date = ocp.usage_start
         -- ANTI JOIN to remove rows that already matched
-        LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} AS ulid
-            ON ulid.azure_id = azure.line_item_id
-        LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}} AS rm
-            ON rm.azure_id = azure.line_item_id
+        LEFT JOIN hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 AS ulid
+            ON ulid.gcp_id = gcp.line_item_id
+        LEFT JOIN hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000 AS rm
+            ON rm.gcp_id = gcp.line_item_id
         WHERE ocp.source_uuid = UUID '{{ocp_source_uuid | sqlsafe}}'
             AND ocp.data_source = 'Storage'
-            AND ulid.azure_id IS NULL
-            AND rm.azure_id IS NULL
+            AND ulid.gcp_id IS NULL
+            AND rm.gcp_id IS NULL
     ),
     cte_number_of_shared AS (
-        SELECT azure_id,
+        SELECT gcp_id,
             count(DISTINCT namespace) as shared_projects
         FROM cte_tag_matched
-        GROUP BY azure_id
+        GROUP BY gcp_id
     )
     SELECT tm.*,
         tm.pretax_cost / shared.shared_projects as project_cost,
         shared.shared_projects
     FROM cte_tag_matched AS tm
     JOIN cte_number_of_shared AS shared
-        ON tm.azure_id = shared.azure_id
+        ON tm.gcp_id = shared.gcp_id
 ;
 
--- Next we match where the azure tag is the special openshift_cluster key
+-- Next we match where the gcp tag is the special openshift_cluster key
 -- and the value matches an OpenShift cluster name
- INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}}
+ INSERT INTO hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000
     WITH cte_tag_matched AS (
         SELECT cast(ocp.uuid AS VARCHAR) AS ocp_id,
             ocp.report_period_id,
@@ -742,58 +741,58 @@ INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_
             ocp.volume_request_storage_gigabyte_months,
             ocp.persistentvolumeclaim_usage_gigabyte_months,
             json_format(ocp.volume_labels) as volume_labels,
-            azure.cost_entry_bill_id,
-            azure.line_item_id as azure_id,
-            azure.usage_date,
-            azure.subscription_guid,
-            azure.instance_type,
-            azure.service_name,
-            azure.resource_location,
-            azure.resource_id,
-            azure.usage_quantity,
-            azure.pretax_cost,
-            azure.currency,
-            azure.unit_of_measure,
-            azure.tags
-        FROM hive.{{schema | sqlsafe}}.__reporting_azure_special_case_tags_{{uuid | sqlsafe}} as azure
-        JOIN postgres.{{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary as ocp
-            ON json_extract_scalar(azure.lower_tags, '$.openshift_cluster') IN (lower(ocp.cluster_id), lower(ocp.cluster_alias))
-                AND azure.usage_date = ocp.usage_start
+            gcp.cost_entry_bill_id,
+            gcp.line_item_id as gcp_id,
+            gcp.usage_date,
+            gcp.subscription_guid,
+            gcp.instance_type,
+            gcp.service_name,
+            gcp.resource_location,
+            gcp.resource_id,
+            gcp.usage_quantity,
+            gcp.pretax_cost,
+            gcp.currency,
+            gcp.unit_of_measure,
+            gcp.tags
+        FROM hive.acct10001.__reporting_gcp_special_case_tags_00000000_0000_0000_0000_000000000000 as gcp
+        JOIN postgres.acct10001.reporting_ocpusagelineitem_daily_summary as ocp
+            ON json_extract_scalar(gcp.lower_tags, '$.openshift_cluster') IN (lower(ocp.cluster_id), lower(ocp.cluster_alias))
+                AND gcp.usage_date = ocp.usage_start
         -- ANTI JOIN to remove rows that already matched
-        LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} AS ulid
-            ON ulid.azure_id = azure.line_item_id
-        LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}} AS rm
-            ON rm.azure_id = azure.line_item_id
+        LEFT JOIN hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 AS ulid
+            ON ulid.gcp_id = gcp.line_item_id
+        LEFT JOIN hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000 AS rm
+            ON rm.gcp_id = gcp.line_item_id
         WHERE ocp.source_uuid = UUID '{{ocp_source_uuid | sqlsafe}}'
             AND ocp.data_source = 'Storage'
-            AND ulid.azure_id IS NULL
-            AND rm.azure_id IS NULL
+            AND ulid.gcp_id IS NULL
+            AND rm.gcp_id IS NULL
     ),
     cte_number_of_shared AS (
-        SELECT azure_id,
+        SELECT gcp_id,
             count(DISTINCT namespace) as shared_projects
         FROM cte_tag_matched
-        GROUP BY azure_id
+        GROUP BY gcp_id
     )
     SELECT tm.*,
         tm.pretax_cost / shared.shared_projects as project_cost,
         shared.shared_projects
     FROM cte_tag_matched AS tm
     JOIN cte_number_of_shared AS shared
-        ON tm.azure_id = shared.azure_id
+        ON tm.gcp_id = shared.gcp_id
 
 ;
 
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_azure_daily_{{uuid | sqlsafe}}
+DROP TABLE IF EXISTS hive.acct10001.__reporting_gcp_daily_00000000_0000_0000_0000_000000000000
 ;
 
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_azure_special_case_tags_{{uuid | sqlsafe}}
+DROP TABLE IF EXISTS hive.acct10001.__reporting_gcp_special_case_tags_00000000_0000_0000_0000_000000000000
 ;
 
 
 -- Then we match for OpenShift volume data where the volume label key and value
--- and azure tag key and value match directly
- INSERT INTO hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}}
+-- and gcp tag key and value match directly
+ INSERT INTO hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000
     WITH cte_tag_matched AS (
         SELECT ocp.ocp_id,
             ocp.report_period_id,
@@ -809,79 +808,79 @@ DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_azure_special_case_ta
             ocp.volume_request_storage_gigabyte_months,
             ocp.persistentvolumeclaim_usage_gigabyte_months,
             ocp.volume_labels,
-            azure.cost_entry_bill_id,
-            azure.line_item_id as azure_id,
-            azure.usage_date,
-            azure.subscription_guid,
-            azure.instance_type,
-            azure.service_name,
-            azure.resource_location,
-            azure.resource_id,
-            azure.usage_quantity,
-            azure.pretax_cost,
-            azure.currency,
-            azure.unit_of_measure,
-            azure.tags
-        FROM hive.{{schema | sqlsafe}}.__reporting_azure_tags_{{uuid | sqlsafe}} as azure
-        JOIN hive.{{schema | sqlsafe}}.__reporting_ocp_storage_tags_{{uuid | sqlsafe}} as ocp
-            ON azure.usage_date = ocp.usage_start
-                AND strpos(azure.lower_tags, ocp.tag) != 0
+            gcp.cost_entry_bill_id,
+            gcp.line_item_id as gcp_id,
+            gcp.usage_date,
+            gcp.subscription_guid,
+            gcp.instance_type,
+            gcp.service_name,
+            gcp.resource_location,
+            gcp.resource_id,
+            gcp.usage_quantity,
+            gcp.pretax_cost,
+            gcp.currency,
+            gcp.unit_of_measure,
+            gcp.tags
+        FROM hive.acct10001.__reporting_gcp_tags_00000000_0000_0000_0000_000000000000 as gcp
+        JOIN hive.acct10001.__reporting_ocp_storage_tags_00000000_0000_0000_0000_000000000000 as ocp
+            ON gcp.usage_date = ocp.usage_start
+                AND strpos(gcp.lower_tags, ocp.tag) != 0
         -- ANTI JOIN to remove rows that already matched
-        LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}} AS rm
-            ON rm.azure_id = azure.line_item_id
-        WHERE rm.azure_id IS NULL
+        LEFT JOIN hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000 AS rm
+            ON rm.gcp_id = gcp.line_item_id
+        WHERE rm.gcp_id IS NULL
     ),
     cte_number_of_shared AS (
-        SELECT azure_id,
+        SELECT gcp_id,
             count(DISTINCT namespace) as shared_projects
         FROM cte_tag_matched
-        GROUP BY azure_id
+        GROUP BY gcp_id
     )
     SELECT tm.*,
         tm.pretax_cost / shared.shared_projects as project_cost,
         shared.shared_projects
     FROM cte_tag_matched AS tm
     JOIN cte_number_of_shared AS shared
-        ON tm.azure_id = shared.azure_id
+        ON tm.gcp_id = shared.gcp_id
 ;
 
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_ocp_storage_tags_{{uuid | sqlsafe}}
+DROP TABLE IF EXISTS hive.acct10001.__reporting_ocp_storage_tags_00000000_0000_0000_0000_000000000000
 ;
 
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_azure_tags_{{uuid | sqlsafe}}
+DROP TABLE IF EXISTS hive.acct10001.__reporting_gcp_tags_00000000_0000_0000_0000_000000000000
 ;
 
 
--- The full summary data for Openshift pod<->azure and
--- Openshift volume<->azure matches are UNIONed together
--- with a GROUP BY using the azure ID to deduplicate
--- the azure data. This should ensure that we never double count
--- azure cost or usage.
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_daily_summary_{{uuid | sqlsafe}};
-CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_daily_summary_{{uuid | sqlsafe}} AS (
+-- The full summary data for Openshift pod<->gcp and
+-- Openshift volume<->gcp matches are UNIONed together
+-- with a GROUP BY using the gcp ID to deduplicate
+-- the gcp data. This should ensure that we never double count
+-- gcp cost or usage.
+DROP TABLE IF EXISTS hive.acct10001.__reporting_ocpgcpcostlineitem_daily_summary_00000000_0000_0000_0000_000000000000;
+CREATE TABLE hive.acct10001.__reporting_ocpgcpcostlineitem_daily_summary_00000000_0000_0000_0000_000000000000 AS (
     WITH cte_pod_project_cost AS (
-        SELECT pc.azure_id,
+        SELECT pc.gcp_id,
             map_agg(pc.namespace, pc.project_cost) as project_costs
             FROM (
-                SELECT li.azure_id,
+                SELECT li.gcp_id,
                     li.namespace,
                     sum(project_cost) as project_cost
-                FROM hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} as li
-                GROUP BY li.azure_id, li.namespace
+                FROM hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 as li
+                GROUP BY li.gcp_id, li.namespace
             ) AS pc
-        GROUP BY pc.azure_id
+        GROUP BY pc.gcp_id
     ),
     cte_storage_project_cost AS (
-        SELECT pc.azure_id,
+        SELECT pc.gcp_id,
             map_agg(pc.namespace, pc.project_cost) as project_costs
         FROM (
-            SELECT li.azure_id,
+            SELECT li.gcp_id,
                 li.namespace,
                 sum(project_cost) as project_cost
-            FROM hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}} as li
-            GROUP BY li.azure_id, li.namespace
+            FROM hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000 as li
+            GROUP BY li.gcp_id, li.namespace
         ) AS pc
-        GROUP BY pc.azure_id
+        GROUP BY pc.gcp_id
     )
     SELECT max(li.report_period_id) as report_period_id,
         max(li.cluster_id) as cluster_id,
@@ -904,12 +903,12 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_daily_su
         max(li.pretax_cost) * cast({{markup}} as decimal(24,9)) as markup_cost,
         max(li.shared_projects) as shared_projects,
         pc.project_costs as project_costs,
-        '{{azure_source_uuid | sqlsafe}}' as source_uuid
-    FROM hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} as li
+        '4963ab4d-a830-4226-ba3c-faeb9cf76f3e' -- '{{gcp_source_uuid | sqlsafe}}' as source_uuid
+    FROM hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 as li
     JOIN cte_pod_project_cost as pc
-        ON li.azure_id = pc.azure_id
-    -- Dedup on azure line item so we never double count usage or cost
-    GROUP BY li.azure_id, li.tags, pc.project_costs
+        ON li.gcp_id = pc.gcp_id
+    -- Dedup on gcp line item so we never double count usage or cost
+    GROUP BY li.gcp_id, li.tags, pc.project_costs
 
     UNION
 
@@ -934,27 +933,27 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_daily_su
         max(li.pretax_cost) * cast({{markup}} as decimal(24,9)) as markup_cost,
         max(li.shared_projects) as shared_projects,
         pc.project_costs as project_costs,
-        '{{azure_source_uuid | sqlsafe}}' as source_uuid
-    FROM hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}} AS li
+        '4963ab4d-a830-4226-ba3c-faeb9cf76f3e' -- '{{gcp_source_uuid | sqlsafe}}' as source_uuid
+    FROM hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000 AS li
     JOIN cte_storage_project_cost AS pc
-        ON li.azure_id = pc.azure_id
-    LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} AS ulid
-        ON ulid.azure_id = li.azure_id
-        AND ulid.azure_id IS NULL
-    GROUP BY li.azure_id, li.tags, pc.project_costs
+        ON li.gcp_id = pc.gcp_id
+    LEFT JOIN hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 AS ulid
+        ON ulid.gcp_id = li.gcp_id
+        AND ulid.gcp_id IS NULL
+    GROUP BY li.gcp_id, li.tags, pc.project_costs
 )
 ;
 
--- The full summary data for Openshift pod<->azure and
--- Openshift volume<->azure matches are UNIONed together
+-- The full summary data for Openshift pod<->gcp and
+-- Openshift volume<->gcp matches are UNIONed together
 -- with a GROUP BY using the OCP ID to deduplicate
 -- based on OpenShift data. This is effectively the same table
--- as reporting_ocpazurecostlineitem_daily_summary but from the OpenShift
+-- as reporting_ocpgcpcostlineitem_daily_summary but from the OpenShift
 -- point of view. Here usage and cost are divided by the
 -- number of pods sharing the cost so the values turn out the
 -- same when reported.
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_project_daily_summary_{{uuid | sqlsafe}};
-CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_project_daily_summary_{{uuid | sqlsafe}} AS (
+DROP TABLE IF EXISTS hive.acct10001.__reporting_ocpgcpcostlineitem_project_daily_summary_00000000_0000_0000_0000_000000000000;
+CREATE TABLE hive.acct10001.__reporting_ocpgcpcostlineitem_project_daily_summary_00000000_0000_0000_0000_000000000000 AS (
     SELECT li.report_period_id,
         li.cluster_id,
         li.cluster_alias,
@@ -979,8 +978,8 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_project_
         max(li.shared_projects) as shared_projects,
         li.project_cost,
         li.project_cost * cast({{markup}} as decimal(24,9)) as project_markup_cost,
-        '{{azure_source_uuid | sqlsafe}}' as source_uuid
-    FROM hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} as li
+        '4963ab4d-a830-4226-ba3c-faeb9cf76f3e' -- '{{gcp_source_uuid | sqlsafe}}' as source_uuid
+    FROM hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 as li
     -- Grouping by OCP this time for the by project view
     GROUP BY li.report_period_id,
         li.ocp_id,
@@ -1018,11 +1017,11 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_project_
         max(li.shared_projects) as shared_projects,
         li.project_cost,
         li.project_cost * cast({{markup}} as decimal(24,9)) as project_markup_cost,
-        '{{azure_source_uuid | sqlsafe}}' as source_uuid
-    FROM hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}} AS li
-    LEFT JOIN hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}} AS ulid
-        ON ulid.azure_id = li.azure_id
-    WHERE ulid.azure_id IS NULL
+        '4963ab4d-a830-4226-ba3c-faeb9cf76f3e' -- '{{gcp_source_uuid | sqlsafe}}' as source_uuid
+    FROM hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000 AS li
+    LEFT JOIN hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000 AS ulid
+        ON ulid.gcp_id = li.gcp_id
+    WHERE ulid.gcp_id IS NULL
     GROUP BY li.ocp_id,
         li.report_period_id,
         li.cluster_id,
@@ -1038,7 +1037,7 @@ CREATE TABLE hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_project_
 
 -- Clear out old entries first
 INSERT
-  INTO postgres.{{schema | sqlsafe}}.presto_delete_wrapper_log
+  INTO postgres.acct10001.presto_delete_wrapper_log
        (
            id,
            action_ts,
@@ -1049,17 +1048,17 @@ INSERT
 VALUES (
     uuid(),
     now(),
-    'reporting_ocpazurecostlineitem_daily_summary',
+    'reporting_ocpgcpcostlineitem_daily_summary',
     'WHERE usage_start >= '{{start_date}}'::date ' ||
       'AND usage_start <= '{{end_date}}'::date ' ||
-      'AND cluster_id = '{{cluster_id}}' ' ||
-      'AND cost_entry_bill_id = {{bill_id}} ',
+      'AND cluster_id = ''my-ocp-cluster-gcp1' -- {{cluster_id}}' ' ||
+      'AND cost_entry_bill_id = 3 -- {{bill_id}} ',
     null
 )
 ;
 
 -- Populate the daily aggregate line item data
-INSERT INTO postgres.{{schema | sqlsafe}}.reporting_ocpazurecostlineitem_daily_summary (
+INSERT INTO postgres.acct10001.reporting_ocpgcpcostlineitem_daily_summary (
     uuid,
     report_period_id,
     cluster_id,
@@ -1107,13 +1106,13 @@ INSERT INTO postgres.{{schema | sqlsafe}}.reporting_ocpazurecostlineitem_daily_s
         shared_projects,
         cast(project_costs AS JSON),
         cast(source_uuid AS UUID)
-    FROM hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_daily_summary_{{uuid | sqlsafe}}
+    FROM hive.acct10001.__reporting_ocpgcpcostlineitem_daily_summary_00000000_0000_0000_0000_000000000000
 ;
 
 
 -- Clear out old entries first
 INSERT
-  INTO postgres.{{schema | sqlsafe}}.presto_delete_wrapper_log
+  INTO postgres.acct10001.presto_delete_wrapper_log
        (
            id,
            action_ts,
@@ -1124,16 +1123,16 @@ INSERT
 VALUES (
     uuid(),
     now(),
-    'reporting_ocpazurecostlineitem_project_daily_summary',
+    'reporting_ocpgcpcostlineitem_project_daily_summary',
     'where usage_start >= '{{start_date}}'::date ' ||
       'and usage_start <= '{{end_date}}'::date ' ||
-      'and cluster_id = '{{cluster_id}}' ' ||
-      'and cost_entry_bill_id = {{bill_id}} ',
+      'and cluster_id = ''my-ocp-cluster-gcp1' -- {{cluster_id}}' ' ||
+      'and cost_entry_bill_id = 3 -- {{bill_id}} ',
     null
 )
 ;
 
-INSERT INTO postgres.{{schema | sqlsafe}}.reporting_ocpazurecostlineitem_project_daily_summary (
+INSERT INTO postgres.acct10001.reporting_ocpgcpcostlineitem_project_daily_summary (
     uuid,
     report_period_id,
     cluster_id,
@@ -1183,7 +1182,7 @@ INSERT INTO postgres.{{schema | sqlsafe}}.reporting_ocpazurecostlineitem_project
         cast(project_cost AS decimal(30,15)),
         cast(project_markup_cost AS decimal(30,15)),
         cast(source_uuid as UUID)
-    FROM hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_project_daily_summary_{{uuid | sqlsafe}}
+    FROM hive.acct10001.__reporting_ocpgcpcostlineitem_project_daily_summary_00000000_0000_0000_0000_000000000000
 ;
 
 
@@ -1192,13 +1191,13 @@ INSERT INTO postgres.{{schema | sqlsafe}}.reporting_ocpazurecostlineitem_project
  *               CLEANUP
  * ====================================
  */
-DELETE FROM hive.{{schema | sqlsafe}}.__matched_tags_{{uuid | sqlsafe}};
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__matched_tags_{{uuid | sqlsafe}};
-DELETE FROM hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_daily_summary_{{uuid | sqlsafe}};
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_daily_summary_{{uuid | sqlsafe}};
-DELETE FROM  hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}};
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_ocpazureusagelineitem_daily_{{uuid | sqlsafe}};
-DELETE FROM  hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}};
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_ocpazurestoragelineitem_daily_{{uuid | sqlsafe}};
-DELETE FROM hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_project_daily_summary_{{uuid | sqlsafe}};
-DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__reporting_ocpazurecostlineitem_project_daily_summary_{{uuid | sqlsafe}};
+DELETE FROM hive.acct10001.__matched_tags_00000000_0000_0000_0000_000000000000;
+DROP TABLE IF EXISTS hive.acct10001.__matched_tags_00000000_0000_0000_0000_000000000000;
+DELETE FROM hive.acct10001.__reporting_ocpgcpcostlineitem_daily_summary_00000000_0000_0000_0000_000000000000;
+DROP TABLE IF EXISTS hive.acct10001.__reporting_ocpgcpcostlineitem_daily_summary_00000000_0000_0000_0000_000000000000;
+DELETE FROM  hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000;
+DROP TABLE IF EXISTS hive.acct10001.__reporting_ocpgcpusagelineitem_daily_00000000_0000_0000_0000_000000000000;
+DELETE FROM  hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000;
+DROP TABLE IF EXISTS hive.acct10001.__reporting_ocpgcpstoragelineitem_daily_00000000_0000_0000_0000_000000000000;
+DELETE FROM hive.acct10001.__reporting_ocpgcpcostlineitem_project_daily_summary_00000000_0000_0000_0000_000000000000;
+DROP TABLE IF EXISTS hive.acct10001.__reporting_ocpgcpcostlineitem_project_daily_summary_00000000_0000_0000_0000_000000000000;

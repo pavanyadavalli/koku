@@ -378,7 +378,8 @@ FROM (
  *               CLEANUP
  * ====================================
  */
-
+DELETE FROM hive.{{schema | sqlsafe}}.__ocp_namespace_label_line_item_daily_{{uuid | sqlsafe}};
+DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__ocp_namespace_label_line_item_daily_{{uuid | sqlsafe}};
 DELETE FROM hive.{{schema | sqlsafe}}.__ocp_node_label_line_item_daily_{{uuid | sqlsafe}};
 DROP TABLE IF EXISTS hive.{{schema | sqlsafe}}.__ocp_node_label_line_item_daily_{{uuid | sqlsafe}};
 DELETE FROM hive.{{schema | sqlsafe}}.__ocp_cluster_capacity_{{uuid | sqlsafe}};

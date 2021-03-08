@@ -11,7 +11,7 @@ generators:
       end_date: {{end_date}}
       cost: 2557
       currency: USD
-      tags: {"environment": "ci", "project":"billion-force-58425900", "vm-instance":"gcp-vm2"}
+      tags: {"environment": "ci", "project":"billion-force-58425800", "vm-instance":"gcp-vm2"}
   - ComputeEngineGenerator:
       start_date: {{start_date}}
       end_date: {{end_date}}
@@ -23,7 +23,7 @@ generators:
       end_date: {{end_date}}
       cost: 2557
       currency: USD
-      tags: {"environment": "ci", "project":"billion-force-58425900", "vm-instance":"gcp-vm2"}
+      tags: {"environment": "ci", "project":"billion-force-58425800", "vm-instance":"gcp-vm2"}
   - CloudStorageGenerator:
       start_date: {{start_date}}
       end_date: {{end_date}}
@@ -33,10 +33,5 @@ projects:
   -
     billing_account_id: example_account_id1
     project.name: billion-force-58425800
-    project.id: example-project-id-1
-    project.labels: step:chair;year:each
-  -
-    billing_account_id: example_account_id1
-    project.name: billion-force-58425900
-    project.id: example-project-id-1
+    project.id: example-project-id
     project.labels: step:chair;year:each

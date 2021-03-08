@@ -1,8 +1,8 @@
 ---
 generators:
   - OCPGenerator:
-      start_date: {{start_date}}
-      end_date: {{end_date}}
+      start_date: 2021-03-01
+      end_date: 2021-03-08
       nodes:
         - node:
           node_name: gcp_compute1

@@ -1,0 +1,40 @@
+---
+generators:
+  - VMGenerator:
+      start_date: {{start_date}}
+      end_date: {{end_date}}
+      service_name: Compute Engine
+      resource_location: "us-east1"
+      tags:
+        vm-instance: gcp-vm1
+  - VMGenerator:
+      start_date: {{start_date}}
+      end_date: {{end_date}}
+      service_name: Compute Engine
+      resource_location: "us-east1"
+      tags:
+        vm-instance: gcp-vm2
+  - StorageGenerator:
+      start_date: {{start_date}}
+      end_date: {{end_date}}
+      service_name: Cloud Storage
+      resource_location: "us-east1"
+      amount: 10
+      rate: 0.05
+      tags:
+        storage-instance: gcp-storage1
+  - StorageGenerator:
+      start_date: {{start_date}}
+      end_date: {{end_date}}
+      service_name: Cloud Storage
+      resource_location: "us-east1"
+      amount: 10
+      rate: 0.05
+      tags:
+        storage-instance: gcp-storage2
+
+# SubscriptionGuid
+accounts:
+  payer: 816f9fab-e5fc-46c0-aa97-d8cce03aadb5
+  user:
+    - 349099ca-1b23-474e-90cf-fc5c90d6e664

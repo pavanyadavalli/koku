@@ -1,17 +1,17 @@
 ---
 generators:
   - OCPGenerator:
-      start_date: {{start_date}}
-      end_date: {{end_date}}
+      start_date: 2021-03-01
+      end_date: 2021-03-08
       nodes:
         - node:
-          node_name: gcp_compute1
-          node_labels: label_nodeclass:compute|label_vm-instance:gcp-vm1
+          node_name: aws_compute1
+          node_labels: label_nodeclass:compute
           cpu_cores: 2
           memory_gig: 8
-          resource_id: 99999995
+          resource_id: 55555555
           namespaces:
-            mobile:
+            install-test:
               pods:
                 - pod:
                   pod_name: pod_name1
@@ -20,20 +20,20 @@ generators:
                   cpu_limit: 1
                   mem_limit_gig: 4
                   pod_seconds: 3600
-                  labels: label_environment:Nilfheim|label_app:mobile|label_version:Muspelheim|label_vm-instance:gcp-vm1
+                  labels: label_environment:dev|label_app:catalog|label_version:prod
               volumes:
                 - volume:
                   volume_name: pvc-volume_1
                   storage_class: gp2
                   volume_request_gig: 20
-                  labels: label_environment:Nilfheim|label_app:mobile|label_version:Muspelheim|label_storageclass:Baldur|label_storage-instance:gcp-storage1
+                  labels: label_environment:dev|label_app:catalog|label_version:prod|label_storageclass:bravo
                   volume_claims:
                   - volume_claim:
                     volume_claim_name: pod_name1_data
                     pod_name: pod_name1
-                    labels: label_environment:Nilfheim|label_app:mobile|label_version:Muspelheim|label_storageclass:Baldur|label_storage-instance:gcp-storage1
+                    labels: label_environment:dev|label_app:catalog|label_version:prod|label_storageclass:bravo
                     capacity_gig: 20
-            news-site:
+            catalog:
               pods:
                 - pod:
                   pod_name: pod_name2
@@ -42,27 +42,27 @@ generators:
                   cpu_limit: 1
                   mem_limit_gig: 4
                   pod_seconds: 3600
-                  labels: label_environment:Nilfheim|label_app:mobile|label_version:Muspelheim|label_vm-instance:gcp-vm1
+                  labels: label_environment:dev|label_app:catalog|label_version:prod
               volumes:
                 - volume:
                   volume_name: pvc-volume_2
                   storage_class: gp2
                   volume_request_gig: 20
-                  labels: label_environment:Nilfheim|label_app:mobile|label_version:Muspelheim|label_storageclass:Loki|label_storage-instance:gcp-storage1
+                  labels: label_environment:dev|label_app:catalog|label_version:prod|label_storageclass:delta
                   volume_claims:
                   - volume_claim:
                     volume_claim_name: pod_name2_data
                     pod_name: pod_name2
-                    labels: label_environment:Nilfheim|label_app:mobile|label_version:Muspelheim|label_storageclass:Loki|label_storage-instance:gcp-storage1
+                    labels: label_environment:dev|label_app:catalog|label_version:prod|label_storageclass:delta
                     capacity_gig: 20
         - node:
-          node_name: gcp_compute2
-          node_labels: label_nodeclass:compute|label_vm-instance:gcp-vm2
+          node_name: aws_compute2
+          node_labels: label_nodeclass:compute
           cpu_cores: 2
           memory_gig: 8
-          resource_id: 99999996
+          resource_id: 55555556
           namespaces:
-            banking:
+            cost-management:
               pods:
                 - pod:
                   pod_name: pod_name3
@@ -71,27 +71,26 @@ generators:
                   cpu_limit: 1
                   mem_limit_gig: 4
                   pod_seconds: 3600
-                  labels: label_environment:qe|label_app:banking|label_version:Yggdrasil|label_vm-instance:gcp-vm2
+                  labels: label_environment:qe|label_app:cost|label_version:beta
               volumes:
                 - volume:
                   volume_name: pvc-volume_3
                   storage_class: gp2
                   volume_request_gig: 20
-                  labels: label_environment:qe|label_app:banking|label_version:Yggdrasil|label_storageclass:Odin|label_storage-instance:gcp-storage2
+                  labels: label_environment:qe|label_app:cost|label_version:beta|label_storageclass:epsilon
                   volume_claims:
                   - volume_claim:
                     volume_claim_name: pod_name3_data
                     pod_name: pod_name3
-                    labels: label_environment:qe|label_app:banking|label_version:Yggdrasil|label_storageclass:Odin|label_storage-instance:gcp-storage2
+                    labels: label_environment:qe|label_app:cost|label_version:beta|label_storageclass:epsilon
                     capacity_gig: 20
         - node:
-          node_name: gcp_compute3
-          node_labels: label_nodeclass:compute|label_vm-instance:gcp-vm2
+          node_name: aws_compute3
           cpu_cores: 2
           memory_gig: 8
-          resource_id: 99999997
+          resource_id: 55555557
           namespaces:
-            weather:
+            analytics:
               pods:
                 - pod:
                   pod_name: pod_name4
@@ -100,25 +99,25 @@ generators:
                   cpu_limit: 2
                   mem_limit_gig: 4
                   pod_seconds: 3600
-                  labels: label_environment:Muspelheim|label_app:weather|label_version:Alfheim|label_vm-instance:gcp-vm2
+                  labels: label_environment:prod|label_app:analytics|label_version:gamma
               volumes:
                 - volume:
                   volume_name: pvc-volume_4
                   storage_class: gp2
                   volume_request_gig: 20
-                  labels: label_environment:Muspelheim|label_app:weather|label_version:Alfheim|label_storageclass:Thor|label_storage-instance:gcp-storage2
+                  labels: label_environment:prod|label_app:analytics|label_version:gamma|label_storageclass:charlie
                   volume_claims:
                   - volume_claim:
                     volume_claim_name: pod_name4_data
                     pod_name: pod_name4
-                    labels: label_environment:Muspelheim|label_app:weather|label_version:Alfheim|label_storageclass:Thor|label_storage-instance:gcp-storage2
+                    labels: label_environment:prod|label_app:analytics|label_version:gamma|label_storageclass:charlie
                     capacity_gig: 20
         - node:
-          node_name: gcp_master
-          node_labels: label_nodeclass:master|label_vm-instance:gcp-vm1
+          node_name: aws_master
+          node_labels: label_nodeclass:master
           cpu_cores: 2
           memory_gig: 8
-          resource_id: 99999998
+          resource_id: 55555558
           namespaces:
             kube-system:
               pods:
@@ -129,7 +128,7 @@ generators:
                   cpu_limit: 1
                   mem_limit_gig: 4
                   pod_seconds: 3600
-                  labels: label_environment:Muspelheim|label_app:Jotunheim|label_version:Jotunheim|label_vm-instance:gcp-vm1
+                  labels: label_environment:prod|label_app:master|label_version:master
             openshift:
               pods:
                 - pod:
@@ -139,4 +138,4 @@ generators:
                   cpu_limit: 1
                   mem_limit_gig: 4
                   pod_seconds: 3600
-                  labels: label_environment:Nilfheim|label_app:Jotunheim|label_version:Jotunheim|label_vm-instance:gcp-vm1
+                  labels: label_environment:dev|label_app:master|label_version:master

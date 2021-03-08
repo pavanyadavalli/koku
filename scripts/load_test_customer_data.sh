@@ -97,7 +97,9 @@ YAML_FILES=("ocp_on_aws/aws_static_data.yml"
             "ocp_on_azure/azure_static_data.yml"
             "ocp_on_azure/ocp_static_data.yml"
             "azure_v2.yml"
-            "gcp/gcp_static_data.yml")
+            "gcp/gcp_static_data.yml",
+            "ocp_on_gcp/gcp_static_data.yml",
+            "ocp_on_gcp/ocp_static_data.yml")
 
 RENDERED_YAML=()
 for fname in ${YAML_FILES[*]}; do
@@ -122,7 +124,11 @@ $NISE report ocp --ocp-cluster-id my-ocp-cluster-3 --insights-upload "$NISE_DATA
 $NISE report azure --static-report-file "$YAML_PATH/rendered_azure_v2.yml" --azure-container-name "$NISE_DATA_PATH/local_providers/azure_local" --azure-report-name azure-report-v2 --version-two
 
 # GCP report
-$NISE report gcp --static-report-file "$YAML_PATH/gcp/rendered_gcp_static_data.yml" --gcp-bucket-name "$NISE_DATA_PATH/local_providers/gcp_local"
+#$NISE report gcp --static-report-file "$YAML_PATH/gcp/rendered_gcp_static_data.yml" --gcp-bucket-name "$NISE_DATA_PATH/local_providers/gcp_local"
+
+# OpenShift on GCP
+$NISE report aws --static-report-file "$YAML_PATH/ocp_on_gcp/rendered_gcp_static_data.yml" --aws-s3-report-name None --aws-s3-bucket-name "$NISE_DATA_PATH/local_providers/gcp_local"
+$NISE report ocp --static-report-file "$YAML_PATH/ocp_on_gcp/rendered_ocp_static_data.yml" --ocp-cluster-id my-ocp-gcp-cluster-1 --insights-upload "$NISE_DATA_PATH/pvc_dir/insights_local"
 
 for fname in ${RENDERED_YAML[*]}; do
     debug_echo "removing ${fname}..."

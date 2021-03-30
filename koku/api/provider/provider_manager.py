@@ -217,6 +217,7 @@ class ProviderManager:
             raise ProviderManagerError(err_msg)
 
         if self.is_removable_by_user(current_user):
+            provider_cleanup(self.model)
             self.model.delete()
             LOG.info(f"Provider: {self.model.name} removed by {current_user.username}")
         else:
@@ -226,23 +227,21 @@ class ProviderManager:
             raise ProviderManagerError(err_msg)
 
 
-@receiver(post_delete, sender=Provider)
-def provider_post_delete_callback(*args, **kwargs):
+def provider_cleanup(provider):
     """
     Asynchronously delete this Provider's archived data.
 
     Note: Signal receivers must accept keyword arguments (**kwargs).
     """
-    provider = kwargs["instance"]
     if provider.authentication:
         auth_count = (
-            Provider.objects.exclude(uuid=provider.uuid).filter(authentication=provider.authentication).count()
+            Provider.objects.filter(authentication=provider.authentication).count()
         )
         if auth_count == 0:
             provider.authentication.delete()
     if provider.billing_source:
         billing_count = (
-            Provider.objects.exclude(uuid=provider.uuid).filter(billing_source=provider.billing_source).count()
+            Provider.objects.filter(billing_source=provider.billing_source).count()
         )
         if billing_count == 0:
             provider.billing_source.delete()
@@ -263,8 +262,7 @@ def provider_post_delete_callback(*args, **kwargs):
         # Local import of task function to avoid potential import cycle.
         from masu.celery.tasks import delete_archived_data
 
-        delete_func = partial(delete_archived_data.delay, provider.customer.schema_name, provider.type, provider.uuid)
-        transaction.on_commit(delete_func)
+        transaction.on_commit(delete_archived_data(provider.customer.schema_name, provider.type, provider.uuid))
 
     refresh_materialized_views(
         provider.customer.schema_name, provider.type, provider_uuid=provider.uuid, synchronous=True

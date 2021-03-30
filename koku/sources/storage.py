@@ -22,6 +22,7 @@ from base64 import b64decode
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
 
+from django.db import transaction
 from django.db import InterfaceError
 from django.db import OperationalError
 
@@ -260,14 +261,34 @@ def get_source(source_id, err_msg, logger):
         raise error
 
 
+def clear_authentication_billing_source(authentication, billing_source):
+    """Clear provider authentication."""
+    if authentication:
+        auth_count = (
+            Provider.objects.filter(authentication=authentication).count()
+        )
+        if auth_count == 0:
+            authentication.delete()
+
+    if billing_source:
+        billing_count = (
+            Provider.objects.filter(billing_source=billing_source).count()
+        )
+        if billing_count == 0:
+            billing_source.delete()
+
+@transaction.atomic
 def mark_provider_as_inactive(provider_uuid):
     """Mark provider as inactive so we do not continue to ingest data while the source is being deleted."""
     try:
         provider = Provider.objects.get(uuid=provider_uuid)
-        provider.active = False
-        provider.billing_source = None
+        authentication = provider.authentication
+        billing_source = provider.billing_source
         provider.authentication = None
+        provider.billing_source = None
+        provider.active = False
         provider.save()
+        clear_authentication_billing_source(authentication, billing_source)
     except Provider.DoesNotExist:
         LOG.info(f"Provider {provider_uuid} does not exist.  Unable to mark as inactive")
 

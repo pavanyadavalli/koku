@@ -22,9 +22,9 @@ from base64 import b64decode
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
 
-from django.db import transaction
 from django.db import InterfaceError
 from django.db import OperationalError
+from django.db import transaction
 
 from api.provider.models import Provider
 from api.provider.models import Sources
@@ -264,18 +264,15 @@ def get_source(source_id, err_msg, logger):
 def clear_authentication_billing_source(authentication, billing_source):
     """Clear provider authentication."""
     if authentication:
-        auth_count = (
-            Provider.objects.filter(authentication=authentication).count()
-        )
+        auth_count = Provider.objects.filter(authentication=authentication).count()
         if auth_count == 0:
             authentication.delete()
 
     if billing_source:
-        billing_count = (
-            Provider.objects.filter(billing_source=billing_source).count()
-        )
+        billing_count = Provider.objects.filter(billing_source=billing_source).count()
         if billing_count == 0:
             billing_source.delete()
+
 
 @transaction.atomic
 def mark_provider_as_inactive(provider_uuid):

@@ -16,14 +16,11 @@
 #
 """Management capabilities for Provider functionality."""
 import logging
-from functools import partial
 
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models.signals import post_delete
-from django.dispatch import receiver
 from tenant_schemas.utils import tenant_context
 
 from api.provider.models import Provider
@@ -217,8 +214,15 @@ class ProviderManager:
             raise ProviderManagerError(err_msg)
 
         if self.is_removable_by_user(current_user):
-            provider_cleanup(self.model)
+            provider = {}
+            provider["uuid"] = self.model.uuid
+            provider["authentication"] = self.model.authentication
+            provider["billing_source"] = self.model.billing_source
+            provider["customer"] = self.model.customer
+            provider["schema_name"] = self.model.customer.schema_name
+            provider["type"] = self.model.type
             self.model.delete()
+            provider_cleanup(provider)
             LOG.info(f"Provider: {self.model.name} removed by {current_user.username}")
         else:
             err_msg = "User {} does not have permission to delete provider {}".format(
@@ -229,41 +233,46 @@ class ProviderManager:
 
 def provider_cleanup(provider):
     """
-    Asynchronously delete this Provider's archived data.
+    Delete this Provider's archived data, cost models, authenticaiton, and billing_source objects.
 
-    Note: Signal receivers must accept keyword arguments (**kwargs).
     """
-    if provider.authentication:
+    if provider.get("authentication"):
         auth_count = (
-            Provider.objects.filter(authentication=provider.authentication).count()
+            Provider.objects.exclude(uuid=provider.get("uuid"))
+            .filter(authentication=provider.get("authentication"))
+            .count()
         )
         if auth_count == 0:
-            provider.authentication.delete()
-    if provider.billing_source:
+            provider.get("authentication").delete()
+    if provider.get("billing_source"):
         billing_count = (
-            Provider.objects.filter(billing_source=provider.billing_source).count()
+            Provider.objects.exclude(uuid=provider.get("uuid"))
+            .filter(billing_source=provider.get("billing_source"))
+            .count()
         )
         if billing_count == 0:
-            provider.billing_source.delete()
+            provider.get("billing_source").delete()
 
-    provider_rate_objs = CostModelMap.objects.filter(provider_uuid=provider.uuid)
+    provider_rate_objs = CostModelMap.objects.filter(provider_uuid=provider.get("uuid"))
     if provider_rate_objs:
         provider_rate_objs.delete()
 
-    if not provider.customer:
-        LOG.warning("Provider %s has no Customer; we cannot call delete_archived_data.", provider.uuid)
+    if not provider.get("customer"):
+        LOG.warning("Provider %s has no Customer; we cannot call delete_archived_data.", provider.get("uuid"))
         return
 
-    customer = provider.customer
+    customer = provider.get("customer")
     customer.date_updated = DateHelper().now_utc
     customer.save()
 
-    if settings.ENABLE_S3_ARCHIVING or enable_trino_processing(provider.uuid):
+    if settings.ENABLE_S3_ARCHIVING or enable_trino_processing(provider.get("uuid")):
         # Local import of task function to avoid potential import cycle.
         from masu.celery.tasks import delete_archived_data
 
-        transaction.on_commit(delete_archived_data(provider.customer.schema_name, provider.type, provider.uuid))
+        transaction.on_commit(
+            delete_archived_data(provider.get("schema_name"), provider.get("type"), provider.get("uuid"))
+        )
 
     refresh_materialized_views(
-        provider.customer.schema_name, provider.type, provider_uuid=provider.uuid, synchronous=True
+        provider.get("schema_name"), provider.get("type"), provider_uuid=provider.get("uuid"), synchronous=True
     )

@@ -75,6 +75,7 @@ class SourceStatus:
         error_obj = None
         try:
             if self.source.account_id not in settings.DEMO_ACCOUNTS:
+                LOG.info(f"Checking Source Status for: {str(source_authentication)} and {str(source_billing_source)}")
                 interface.cost_usage_source_ready(source_authentication, source_billing_source)
             self._set_provider_active_status(True)
         except ValidationError as validation_error:
@@ -110,11 +111,12 @@ class SourceStatus:
         try:
             status_obj = self.status()
             if self._gcp_bigquery_table_found():
-                builder = SourcesProviderCoordinator(self.source.source_id, self.source.auth_header)
-                if self.source.koku_uuid:
-                    builder.update_account(self.source)
+                source = Sources.objects.get(source_id=self.source.source_id)
+                builder = SourcesProviderCoordinator(source.source_id, source.auth_header)
+                if source.koku_uuid:
+                    builder.update_account(source)
                 else:
-                    builder.create_account(self.source)
+                    builder.create_account(source)
             self.sources_client.set_source_status(status_obj)
             self.update_source_name()
             LOG.info(f"Source status for Source ID: {str(self.source_id)}: Status: {str(status_obj)}")

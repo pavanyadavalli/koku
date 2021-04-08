@@ -590,19 +590,23 @@ def _update_authentication(instance, authentication):
 
 def _update_billing_source_app_settings(source_id, billing_source):
     """Helper method to update source billing source app settings."""
+    LOG.info(f"Updating billing source for {source_id}")
     updated_billing_source = None
     instance = get_source(source_id, "Unable to add billing source", LOG.error)
     if instance.billing_source:
         updated_billing_source = _update_billing_source(instance, billing_source)
+        LOG.info(f"updated_billing_source: {str(updated_billing_source)}")
     if instance.billing_source != updated_billing_source:
         if instance.billing_source:
             # Queue pending provider update if the billing source was previously
             # populated and now has changed.
             instance.pending_update = True
             instance.status = {}
+        LOG.info("setting new billing_source")
         instance.billing_source = billing_source
         if updated_billing_source:
             instance.billing_source = updated_billing_source
+        LOG.info("saving new billing_source")
         instance.save()
 
 

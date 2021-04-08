@@ -85,8 +85,8 @@ class SourceStatus:
 
     def status(self):
         """Find the source's availability status."""
-        import time
-        time.sleep(5)
+        # import time
+        # time.sleep(5)
         self.source.refresh_from_db()
         source_billing_source = self.source.billing_source.get("data_source") or {}
         source_authentication = self.source.authentication.get("credentials") or {}

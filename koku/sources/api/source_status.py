@@ -85,6 +85,9 @@ class SourceStatus:
 
     def status(self):
         """Find the source's availability status."""
+        import time
+        time.sleep(5)
+        self.source.refresh_from_db()
         source_billing_source = self.source.billing_source.get("data_source") or {}
         source_authentication = self.source.authentication.get("credentials") or {}
         provider_type = self.source.source_type
@@ -103,7 +106,6 @@ class SourceStatus:
     def push_status(self):
         """Push status_msg to platform sources."""
         try:
-            self.source.refresh_from_db()
             status_obj = self.status()
             if self.source.source_type in (Provider.PROVIDER_GCP, Provider.PROVIDER_GCP_LOCAL):
                 builder = SourcesProviderCoordinator(self.source.source_id, self.source.auth_header)

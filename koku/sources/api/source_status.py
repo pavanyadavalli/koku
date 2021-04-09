@@ -90,6 +90,7 @@ class SourceStatus:
         self.source.refresh_from_db()
         source_billing_source = self.source.billing_source.get("data_source") or {}
         source_authentication = self.source.authentication.get("credentials") or {}
+        LOG.info(f"Determining Status on: {str(source_authentication)} and {str(source_billing_source)}")
         provider_type = self.source.source_type
         return self.determine_status(provider_type, source_authentication, source_billing_source)
 

@@ -606,7 +606,7 @@ def _update_billing_source_app_settings(source_id, billing_source):
         instance.billing_source = billing_source
         if updated_billing_source:
             instance.billing_source = updated_billing_source
-        LOG.info("saving new billing_source")
+        LOG.info(f"saving new billing_source for {str(instance)}")
         instance.save()
 
 

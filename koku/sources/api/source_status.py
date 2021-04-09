@@ -85,7 +85,8 @@ class SourceStatus:
 
     def status(self):
         """Find the source's availability status."""
-        LOG.info(f"Source before sleep: {str(self.source)}")
+        self.source.refresh_from_db()
+        LOG.info(f"Source before sleep and with refresh: {str(self.source)}")
         import time
         time.sleep(5)
         LOG.info(f"Source after sleep: {str(self.source)}")

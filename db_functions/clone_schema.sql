@@ -16,12 +16,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 DROP FUNCTION IF EXISTS public.clone_schema(text, text, boolean, boolean);
+DROP FUNCTION IF EXISTS public.clone_schema(text, text[], boolean, boolean);
 CREATE OR REPLACE FUNCTION public.clone_schema(
     source_schema text,
-    dest_schema text,
+    new_schemata text[],
     copy_data boolean DEFAULT false,
     _verbose boolean DEFAULT false
-) RETURNS boolean AS $$
+) RETURNS text[] AS $$
 DECLARE
     sequence_objects jsonb[];
     sequence_owner_info jsonb[];
@@ -38,10 +39,9 @@ DECLARE
     source_obj text;
     dest_obj text;
     ix_stmt text;
+    dest_schema_exists oid;
+    completed_schemata text[];
 BEGIN
-    dst_schema = quote_ident(dest_schema);
-    src_schema = quote_ident(source_schema);
-
     /* Check if source schema exists */
     PERFORM oid
        FROM pg_namespace
@@ -51,18 +51,6 @@ BEGIN
         RAISE WARNING 'Source schema % does not exist.', src_schema;
         RETURN false;
     END IF;
-
-    /* Check if dest schema exists */
-    PERFORM oid
-       FROM pg_namespace
-      WHERE nspname = dest_schema;
-    IF FOUND
-    THEN
-        RAISE INFO 'Destination schema % already exists.', dst_schema;
-        RETURN false;
-    END IF;
-
-    SET LOCAL search_path = public;
 
     /*
      * Gather data for copy
@@ -388,342 +376,367 @@ BEGIN
     /*
      * ======================================================================
      */
+    FOREACH dest_schema IN ARRAY new_schemata
+    LOOP
+        /* Check if dest schema exists */
+        SELECT oid
+          INTO dest_schema_exists
+          FROM pg_namespace
+         WHERE nspname = dest_schema;
+        IF FOUND
+        THEN
+            RAISE INFO 'Destination schema % already exists.', dst_schema;
+            RETURN false;
+        END IF;
 
-    /*
-     * Create the new schema
-     */
-    IF _verbose
-    THEN
-        RAISE INFO 'Creating schema %', dst_schema;
-    END IF;
-    EXECUTE 'CREATE SCHEMA ' || dst_schema || ' ;';
+        CONTINUE WHEN dest_schema_exists IS NOT NULL;
 
-    /*
-     * Create sequences
-     */
-    IF cardinality(sequence_objects) > 0
-    THEN
+        dst_schema = quote_ident(dest_schema);
+        src_schema = quote_ident(source_schema);
+
+        SET LOCAL search_path = public;
+
+        /*
+         * Create the new schema
+         */
         IF _verbose
         THEN
-            RAISE INFO 'Creating sequences for %', dst_schema;
+            RAISE INFO 'Creating schema %', dst_schema;
         END IF;
-        FOREACH jobject IN ARRAY sequence_objects
-        LOOP
+        EXECUTE 'CREATE SCHEMA ' || dst_schema || ' ;';
+
+        /*
+         * Create sequences
+         */
+        IF cardinality(sequence_objects) > 0
+        THEN
             IF _verbose
             THEN
-                RAISE INFO '    %.%', dst_schema, quote_ident(jobject->>'sequence_name'::text);
+                RAISE INFO 'Creating sequences for %', dst_schema;
             END IF;
-            EXECUTE FORMAT('CREATE SEQUENCE IF NOT EXISTS %s.%I AS %s START WITH %s INCREMENT BY %s MINVALUE %s MAXVALUE %s CACHE %s %s ;',
-                        dst_schema,
-                        jobject->>'sequence_name'::text,
-                        jobject->>'sequence_type'::text,
-                        jobject->>'sequence_start'::text,
-                        jobject->>'sequence_inc'::text,
-                        jobject->>'sequence_min'::text,
-                        jobject->>'sequence_max'::text,
-                        jobject->>'sequence_cache'::text,
-                        jobject->>'sequence_cycle');
-
-            IF copy_data OR
-            (jobject->>'sequence_name' ~ 'partitioned_tables'::text) OR
-            (jobject->>'sequence_name' ~ 'django_migrations'::text)
-            THEN
-                EXECUTE 'SELECT setval(''' || dst_schema || '.' || quote_ident(jobject->>'sequence_name') || '''::regclass, '::text ||
-                        '(SELECT last_value + 1 FROM ' ||
-                        src_schema || '.' || quote_ident(jobject->>'sequence_name') || ') );'::text;
-            END IF;
-        END LOOP;
-    ELSE
-        IF _verbose
-        THEN
-            RAISE INFO 'No sequences for %', dst_schema;
-        END IF;
-    END IF;
-
-    /*
-     * Create tables
-     */
-    IF cardinality(table_objects) > 0
-    THEN
-        IF _verbose
-        THEN
-            RAISE INFO 'Creating tables for %', dst_schema;
-        END IF;
-        FOREACH jobject IN ARRAY table_objects
-        LOOP
-            dest_obj = dst_schema || '.' || quote_ident(jobject->>'table_name'::text);
-            source_obj = src_schema || '.' || quote_ident(jobject->>'table_name'::text);
-
-            IF jobject->>'table_kind' = 'p'::text
-            THEN
+            FOREACH jobject IN ARRAY sequence_objects
+            LOOP
                 IF _verbose
                 THEN
-                    RAISE INFO '    % (partitioned table)', dest_obj;
+                    RAISE INFO '    %.%', dst_schema, quote_ident(jobject->>'sequence_name'::text);
                 END IF;
-                EXECUTE FORMAT('CREATE TABLE IF NOT EXISTS %s (LIKE %s INCLUDING ALL) PARTITION BY %s ( %I ) ;',
-                            dest_obj,
-                            source_obj,
-                            jobject->>'partition_type'::text,
-                            jobject->>'partition_key'::text);
-            ELSIF (jobject->>'is_partition'::text):: boolean
-            THEN
-                IF _verbose
-                THEN
-                    RAISE INFO '    % (table partition)', dest_obj;
-                END IF;
-                EXECUTE FORMAT('CREATE TABLE IF NOT EXISTS %s PARTITION OF %s.%I %s ;',
-                            dest_obj,
+                EXECUTE FORMAT('CREATE SEQUENCE IF NOT EXISTS %s.%I AS %s START WITH %s INCREMENT BY %s MINVALUE %s MAXVALUE %s CACHE %s %s ;',
                             dst_schema,
-                            jobject->>'partitioned_table'::text,
-                            jobject->>'partition_expr'::text);
-            ELSE
+                            jobject->>'sequence_name'::text,
+                            jobject->>'sequence_type'::text,
+                            jobject->>'sequence_start'::text,
+                            jobject->>'sequence_inc'::text,
+                            jobject->>'sequence_min'::text,
+                            jobject->>'sequence_max'::text,
+                            jobject->>'sequence_cache'::text,
+                            jobject->>'sequence_cycle');
+
+                IF copy_data OR
+                (jobject->>'sequence_name' ~ 'partitioned_tables'::text) OR
+                (jobject->>'sequence_name' ~ 'django_migrations'::text)
+                THEN
+                    EXECUTE 'SELECT setval(''' || dst_schema || '.' || quote_ident(jobject->>'sequence_name') || '''::regclass, '::text ||
+                            '(SELECT last_value + 1 FROM ' ||
+                            src_schema || '.' || quote_ident(jobject->>'sequence_name') || ') );'::text;
+                END IF;
+            END LOOP;
+        ELSE
+            IF _verbose
+            THEN
+                RAISE INFO 'No sequences for %', dst_schema;
+            END IF;
+        END IF;
+
+        /*
+         * Create tables
+         */
+        IF cardinality(table_objects) > 0
+        THEN
+            IF _verbose
+            THEN
+                RAISE INFO 'Creating tables for %', dst_schema;
+            END IF;
+            FOREACH jobject IN ARRAY table_objects
+            LOOP
+                dest_obj = dst_schema || '.' || quote_ident(jobject->>'table_name'::text);
+                source_obj = src_schema || '.' || quote_ident(jobject->>'table_name'::text);
+
+                IF jobject->>'table_kind' = 'p'::text
+                THEN
+                    IF _verbose
+                    THEN
+                        RAISE INFO '    % (partitioned table)', dest_obj;
+                    END IF;
+                    EXECUTE FORMAT('CREATE TABLE IF NOT EXISTS %s (LIKE %s INCLUDING ALL) PARTITION BY %s ( %I ) ;',
+                                dest_obj,
+                                source_obj,
+                                jobject->>'partition_type'::text,
+                                jobject->>'partition_key'::text);
+                ELSIF (jobject->>'is_partition'::text):: boolean
+                THEN
+                    IF _verbose
+                    THEN
+                        RAISE INFO '    % (table partition)', dest_obj;
+                    END IF;
+                    EXECUTE FORMAT('CREATE TABLE IF NOT EXISTS %s PARTITION OF %s.%I %s ;',
+                                dest_obj,
+                                dst_schema,
+                                jobject->>'partitioned_table'::text,
+                                jobject->>'partition_expr'::text);
+                ELSE
+                    IF _verbose
+                    THEN
+                        RAISE INFO '    % (table)', dest_obj;
+                    END IF;
+                    EXECUTE FORMAT('CREATE TABLE IF NOT EXISTS %s (LIKE %s INCLUDING ALL) ;',
+                                dest_obj,
+                                source_obj);
+                END IF;
+
+                IF (copy_data OR
+                    (jobject->>'table_name' ~ 'partitioned_tables'::text) OR
+                    (jobject->>'table_name' ~ 'django_migrations'::text)) AND
+                (jobject->>'table_kind' = 'r'::text)
+                THEN
+                    IF _verbose
+                    THEN
+                        RAISE INFO '        Copying data...';
+                    END IF;
+                    EXECUTE FORMAT('INSERT INTO %s SELECT * FROM %s ;',
+                                dest_obj,
+                                source_obj);
+                END IF;
+
+                IF jobject->>'table_name' = 'partitioned_tables'::text
+                THEN
+                    IF _verbose
+                    THEN
+                        RAISE INFO '        Update partitioned_tables schema data';
+                    END IF;
+                    EXECUTE FORMAT('UPDATE %s SET schema_name = %L ;',
+                                dest_obj,
+                                dest_schema);
+                END IF;
+            END LOOP;
+        ELSE
+            IF _verbose
+            THEN
+                RAISE INFO 'No tables for %', dst_schema;
+            END IF;
+        END IF;
+
+        /*
+         * Create sequence owner links
+         */
+        IF cardinality(sequence_owner_info) > 0
+        THEN
+            IF _verbose
+            THEN
+                RAISE INFO 'Setting sequence ownership for objects in %', dst_schema;
+            END IF;
+            FOREACH jobject IN ARRAY sequence_owner_info
+            LOOP
                 IF _verbose
                 THEN
-                    RAISE INFO '    % (table)', dest_obj;
+                    RAISE INFO '    Update primary key default for %.%', dst_schema, quote_ident(jobject->>'owner_object'::text);
                 END IF;
-                EXECUTE FORMAT('CREATE TABLE IF NOT EXISTS %s (LIKE %s INCLUDING ALL) ;',
-                            dest_obj,
-                            source_obj);
-            END IF;
+                EXECUTE FORMAT('ALTER TABLE %s.%I ALTER COLUMN %I SET DEFAULT nextval( ''%s.%I''::regclass );',
+                            dst_schema,
+                            jobject->>'owner_object'::text,
+                            jobject->>'owner_column'::text,
+                            dst_schema,
+                            jobject->>'sequence_name'::text);
 
-            IF (copy_data OR
-                (jobject->>'table_name' ~ 'partitioned_tables'::text) OR
-                (jobject->>'table_name' ~ 'django_migrations'::text)) AND
-            (jobject->>'table_kind' = 'r'::text)
-            THEN
                 IF _verbose
                 THEN
-                    RAISE INFO '        Copying data...';
+                    RAISE INFO '    Update sequence owned-by table column to %."%"', dest_obj, jobject->>'owner_column'::text;
                 END IF;
-                EXECUTE FORMAT('INSERT INTO %s SELECT * FROM %s ;',
-                            dest_obj,
-                            source_obj);
-            END IF;
-
-            IF jobject->>'table_name' = 'partitioned_tables'::text
+                EXECUTE FORMAT('ALTER SEQUENCE %s.%I OWNED BY %s.%I.%I ;',
+                            dst_schema,
+                            jobject->>'sequence_name'::text,
+                            dest_schema,
+                            jobject->>'owner_object'::text,
+                            jobject->>'owner_column'::text);
+            END LOOP;
+        ELSE
+            IF _verbose
             THEN
+                RAISE INFO 'No sequence owner data for %', dst_schema;
+            END IF;
+        END IF;
+
+        /*
+         * Create Foreign Key Constraints
+         */
+        IF cardinality(fk_objects) > 0
+        THEN
+            IF _verbose
+            THEN
+                RAISE INFO 'Create foriegn key constraints for tables in "%"', dst_schema;
+            END IF;
+            FOREACH jobject IN ARRAY fk_objects
+            LOOP
                 IF _verbose
                 THEN
-                    RAISE INFO '        Update partitioned_tables schema data';
+                    RAISE INFO '    %.%', jobject->>'table_name', jobject->>'constraint_name'::text;
                 END IF;
-                EXECUTE FORMAT('UPDATE %s SET schema_name = %L ;',
-                            dest_obj,
-                            dest_schema);
-            END IF;
-        END LOOP;
-    ELSE
-        IF _verbose
-        THEN
-            RAISE INFO 'No tables for %', dst_schema;
-        END IF;
-    END IF;
-
-    /*
-     * Create sequence owner links
-     */
-    IF cardinality(sequence_owner_info) > 0
-    THEN
-        IF _verbose
-        THEN
-            RAISE INFO 'Setting sequence ownership for objects in %', dst_schema;
-        END IF;
-        FOREACH jobject IN ARRAY sequence_owner_info
-        LOOP
+                EXECUTE jobject->>'alter_stmt'::text;
+            END LOOP;
+        ELSE
             IF _verbose
             THEN
-                RAISE INFO '    Update primary key default for %.%', dst_schema, quote_ident(jobject->>'owner_object'::text);
+                RAISE INFO 'No foreign key constraints for %', dst_schema;
             END IF;
-            EXECUTE FORMAT('ALTER TABLE %s.%I ALTER COLUMN %I SET DEFAULT nextval( ''%s.%I''::regclass );',
-                        dst_schema,
-                        jobject->>'owner_object'::text,
-                        jobject->>'owner_column'::text,
-                        dst_schema,
-                        jobject->>'sequence_name'::text);
+        END IF;
 
+        /*
+         * Create Views
+         */
+        IF cardinality(view_objects) > 0
+        THEN
             IF _verbose
             THEN
-                RAISE INFO '    Update sequence owned-by table column to %."%"', dest_obj, jobject->>'owner_column'::text;
+                RAISE INFO 'Creating views for %', dst_schema;
             END IF;
-            EXECUTE FORMAT('ALTER SEQUENCE %s.%I OWNED BY %s.%I.%I ;',
-                        dst_schema,
-                        jobject->>'sequence_name'::text,
-                        dest_schema,
-                        jobject->>'owner_object'::text,
-                        jobject->>'owner_column'::text);
-        END LOOP;
-    ELSE
-        IF _verbose
-        THEN
-            RAISE INFO 'No sequence owner data for %', dst_schema;
-        END IF;
-    END IF;
-
-    /*
-     * Create Foreign Key Constraints
-     */
-    IF cardinality(fk_objects) > 0
-    THEN
-        IF _verbose
-        THEN
-            RAISE INFO 'Create foriegn key constraints for tables in "%"', dst_schema;
-        END IF;
-        FOREACH jobject IN ARRAY fk_objects
-        LOOP
-            IF _verbose
-            THEN
-                RAISE INFO '    %.%', jobject->>'table_name', jobject->>'constraint_name'::text;
-            END IF;
-            EXECUTE jobject->>'alter_stmt'::text;
-        END LOOP;
-    ELSE
-        IF _verbose
-        THEN
-            RAISE INFO 'No foreign key constraints for %', dst_schema;
-        END IF;
-    END IF;
-
-    /*
-     * Create Views
-     */
-    IF cardinality(view_objects) > 0
-    THEN
-        IF _verbose
-        THEN
-            RAISE INFO 'Creating views for %', dst_schema;
-        END IF;
-        FOREACH jobject IN ARRAY view_objects
-        LOOP
-            IF _verbose
-            THEN
-                RAISE INFO '    %: "%"', jobject->>'view_kind', jobject->>'view_name'::text;
-            END IF;
-            EXECUTE FORMAT('CREATE %s %s.%I AS %s',
-                        jobject->>'view_kind'::text,
-                        dst_schema,
-                        jobject->>'view_name'::text,
-                        jobject->>'view_def'::text);
-
-            IF jsonb_array_length(jobject->'view_indexes') > 0
-            THEN
+            FOREACH jobject IN ARRAY view_objects
+            LOOP
                 IF _verbose
                 THEN
-                    RAISE INFO '        Create indexes';
+                    RAISE INFO '    %: "%"', jobject->>'view_kind', jobject->>'view_name'::text;
                 END IF;
-                FOR ix_stmt IN select jsonb_array_elements_text(jobject->'view_indexes')
-                LOOP
-                    EXECUTE ix_stmt;
-                END LOOP;
-            END IF;
-        END LOOP;
-    ELSE
-        IF _verbose
-        THEN
-            RAISE INFO 'No view objects for %', dst_schema;
-        END IF;
-    END IF;
+                EXECUTE FORMAT('CREATE %s %s.%I AS %s',
+                            jobject->>'view_kind'::text,
+                            dst_schema,
+                            jobject->>'view_name'::text,
+                            jobject->>'view_def'::text);
 
-    /*
-     * Create functions
-     */
-    IF cardinality(function_objects) > 0
-    THEN
-        IF _verbose
-        THEN
-            RAISE INFO 'Create functions, procedures for "%"', dst_schema;
-        END IF;
-        FOREACH jobject IN ARRAY function_objects
-        LOOP
+                IF jsonb_array_length(jobject->'view_indexes') > 0
+                THEN
+                    IF _verbose
+                    THEN
+                        RAISE INFO '        Create indexes';
+                    END IF;
+                    FOR ix_stmt IN select jsonb_array_elements_text(jobject->'view_indexes')
+                    LOOP
+                        EXECUTE ix_stmt;
+                    END LOOP;
+                END IF;
+            END LOOP;
+        ELSE
             IF _verbose
             THEN
-                RAISE INFO '    "%" "%"', jobject->>'func_type', jobject->>'func_name'::text;
+                RAISE INFO 'No view objects for %', dst_schema;
             END IF;
-            EXECUTE jobject->>'func_stmt'::text;
-        END LOOP;
-    ELSE
-        IF _verbose
-        THEN
-            RAISE INFO 'No function/procedure objects for %', dst_schema;
         END IF;
-    END IF;
 
-    /*
-     * Create triggers
-     */
-    IF cardinality(trigger_objects) > 0
-    THEN
-        IF _verbose
+        /*
+         * Create functions
+         */
+        IF cardinality(function_objects) > 0
         THEN
-            RAISE INFO 'Create triggers on objects in "%"', dst_schema;
-        END IF;
-        FOREACH jobject IN ARRAY trigger_objects
-        LOOP
             IF _verbose
             THEN
-                RAISE INFO '    "%"."%"', jobject->>'table_name', jobject->>'trigger_name'::text;
+                RAISE INFO 'Create functions, procedures for "%"', dst_schema;
             END IF;
-            EXECUTE jobject->>'trigger_def'::text;
-        END LOOP;
-    ELSE
-        IF _verbose
-        THEN
-            RAISE INFO 'No trigger objects for %', dst_schema;
-        END IF;
-    END IF;
-
-    /*
-     *  Create rules
-     */
-    IF cardinality(rule_objects) > 0
-    THEN
-        IF _verbose
-        THEN
-            RAISE INFO 'Creating rules on objects in %', dst_schema;
-        END IF;
-        FOREACH jobject IN ARRAY rule_objects
-        LOOP
+            FOREACH jobject IN ARRAY function_objects
+            LOOP
+                IF _verbose
+                THEN
+                    RAISE INFO '    "%" "%"', jobject->>'func_type', jobject->>'func_name'::text;
+                END IF;
+                EXECUTE jobject->>'func_stmt'::text;
+            END LOOP;
+        ELSE
             IF _verbose
             THEN
-                RAISE INFO '    RULE "%" on "%"', jobject->>'rulename', jobject->>'tablename'::text;
+                RAISE INFO 'No function/procedure objects for %', dst_schema;
             END IF;
-            EXECUTE jobject->>'rule_def'::text;
-        END LOOP;
-    ELSE
-        IF _verbose
-        THEN
-            RAISE INFO 'No rule objects for %', dst_schema;
         END IF;
-    END IF;
 
-    /*
-     * Create comments
-     */
-    IF cardinality(comment_objects) > 0
-    THEN
-        IF _verbose
+        /*
+         * Create triggers
+         */
+        IF cardinality(trigger_objects) > 0
         THEN
-            RAISE INFO 'Creating comments on objects in %', dst_schema;
-        END IF;
-        FOREACH jobject IN ARRAY comment_objects
-        LOOP
-            IF _verbose AND ((jobject->>'attnum')::int = -1)
+            IF _verbose
             THEN
-                RAISE INFO '    % % %', jobject->>'comment_type', jobject->>'table_name', jobject->>'column_name';
+                RAISE INFO 'Create triggers on objects in "%"', dst_schema;
             END IF;
-            EXECUTE FORMAT('COMMENT ON %s %s.%s%s%s IS %L ;',
-                        jobject->>'comment_type'::text,
-                        dst_schema,
-                        jobject->>'table_name',
-                        jobject->>'dot',
-                        jobject->>'column_name'::text,
-                        jobject->>'description'::text);
-        END LOOP;
-    ELSE
-        IF _verbose
-        THEN
-            RAISE INFO 'No comments on objects for %', dst_schema;
+            FOREACH jobject IN ARRAY trigger_objects
+            LOOP
+                IF _verbose
+                THEN
+                    RAISE INFO '    "%"."%"', jobject->>'table_name', jobject->>'trigger_name'::text;
+                END IF;
+                EXECUTE jobject->>'trigger_def'::text;
+            END LOOP;
+        ELSE
+            IF _verbose
+            THEN
+                RAISE INFO 'No trigger objects for %', dst_schema;
+            END IF;
         END IF;
-    END IF;
 
-    RETURN true;
+        /*
+         *  Create rules
+         */
+        IF cardinality(rule_objects) > 0
+        THEN
+            IF _verbose
+            THEN
+                RAISE INFO 'Creating rules on objects in %', dst_schema;
+            END IF;
+            FOREACH jobject IN ARRAY rule_objects
+            LOOP
+                IF _verbose
+                THEN
+                    RAISE INFO '    RULE "%" on "%"', jobject->>'rulename', jobject->>'tablename'::text;
+                END IF;
+                EXECUTE jobject->>'rule_def'::text;
+            END LOOP;
+        ELSE
+            IF _verbose
+            THEN
+                RAISE INFO 'No rule objects for %', dst_schema;
+            END IF;
+        END IF;
+
+        /*
+         * Create comments
+         */
+        IF cardinality(comment_objects) > 0
+        THEN
+            IF _verbose
+            THEN
+                RAISE INFO 'Creating comments on objects in %', dst_schema;
+            END IF;
+            FOREACH jobject IN ARRAY comment_objects
+            LOOP
+                IF _verbose AND ((jobject->>'attnum')::int = -1)
+                THEN
+                    RAISE INFO '    % % %', jobject->>'comment_type', jobject->>'table_name', jobject->>'column_name';
+                END IF;
+                EXECUTE FORMAT('COMMENT ON %s %s.%s%s%s IS %L ;',
+                            jobject->>'comment_type'::text,
+                            dst_schema,
+                            jobject->>'table_name',
+                            jobject->>'dot',
+                            jobject->>'column_name'::text,
+                            jobject->>'description'::text);
+            END LOOP;
+        ELSE
+            IF _verbose
+            THEN
+                RAISE INFO 'No comments on objects for %', dst_schema;
+            END IF;
+        END IF;
+
+        /*
+         * Mark that the dest_schema object creation has been successful
+         */
+        array_append(completed_schemata, dest_schema);
+    END LOOP; -- new schema loop end
+
+    RETURN completed_schemata;
 END;
 $$ LANGUAGE plpgsql;

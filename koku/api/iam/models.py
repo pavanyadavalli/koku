@@ -152,7 +152,7 @@ class Tenant(TenantMixin):
     #         LOG.info(f'Cloning template schema "{self._TEMPLATE_SCHEMA}" to "{self.schema_name}"')
 
     #         with conn.cursor() as cur:
-    #             cur.execute(sql, [self._TEMPLATE_SCHEMA, self.schema_name])
+    #             cur.execute(sql, [self._TEMPLATE_SCHEMA, [self.schema_name]])
     #             result = cur.fetchone()
     #             cur.execute("SET search_path = public;")
 

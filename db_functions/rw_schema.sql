@@ -53,13 +53,13 @@ BEGIN
               jsonb_build_object(
                   'sequence_name', c.relname,
                   'sequence_type', s.seqtypid::regtype::text,
-                  'sequence_start', s.seqstart,
-                  'sequence_inc', s.seqincrement,
-                  'sequence_max', s.seqmax,
-                  'sequence_min', s.seqmin,
-                  'sequence_cache', s.seqcache,
+                  'sequence_start', s.seqstart::text,
+                  'sequence_inc', s.seqincrement::text,
+                  'sequence_max', s.seqmax::text,
+                  'sequence_min', s.seqmin::text,
+                  'sequence_cache', s.seqcache::text,
                   'sequence_cycle', CASE WHEN s.seqcycle THEN ' CYCLE' ELSE ' NO CYCLE' END::text,
-                  'sequence_last_value', pg_sequence_last_value(s.seqrelid)
+                  'sequence_last_value', pg_sequence_last_value(s.seqrelid)::text
               )
            ), '{}'::jsonb[])
       INTO sequence_objects
@@ -390,6 +390,7 @@ CREATE OR REPLACE FUNCTION public.create_schema(
 ) RETURNS text[] AS $$
 DECLARE
     jobject jsonb;
+    dest_schema text;
     src_schema text;
     dst_schema text;
     dest_obj text;
@@ -410,7 +411,12 @@ BEGIN
          WHERE nspname = dest_schema;
         IF dest_schema_exists IS NOT NULL
         THEN
-            RAISE INFO 'Destination schema % already exists.', dst_schema;
+            if _verbose
+            THEN
+                RAISE INFO 'Destination schema % already exists.', dst_schema;
+            END IF;
+
+            completed_schemata = array_append(completed_schemata, '!' || dest_schema);
         END IF;
 
         CONTINUE WHEN dest_schema_exists IS NOT NULL;
@@ -447,17 +453,17 @@ BEGIN
                    (jobject->>'sequence_name' ~ 'partitioned_tables'::text) OR
                    (jobject->>'sequence_name' ~ 'django_migrations'::text)
                 THEN
-                    seq_start = coalesce((jobject->'sequence_last_value')::int + 1, (jobject->>'sequence_start')::int)
+                    seq_start = coalesce((jobject->>'sequence_last_value')::bigint + 1, (jobject->>'sequence_start')::bigint);
                 END IF;
 
                 EXECUTE FORMAT('CREATE SEQUENCE IF NOT EXISTS %I AS %s START WITH %s INCREMENT BY %s MINVALUE %s MAXVALUE %s CACHE %s %s ;',
                             jobject->>'sequence_name'::text,
                             jobject->>'sequence_type'::text,
-                            seq_start::int,
-                            (jobject->>'sequence_inc')::int,
-                            (jobject->>'sequence_min')::int,
-                            (jobject->>'sequence_max')::int,
-                            (jobject->>'sequence_cache')::int,
+                            seq_start::bigint,
+                            (jobject->>'sequence_inc')::bigint,
+                            (jobject->>'sequence_min')::bigint,
+                            (jobject->>'sequence_max')::bigint,
+                            (jobject->>'sequence_cache')::bigint,
                             jobject->>'sequence_cycle'::text);
             END LOOP;
         ELSE
@@ -748,7 +754,7 @@ BEGIN
         /*
          * Mark that the dest_schema object creation has been successful
          */
-        array_append(completed_schemata, dest_schema);
+        completed_schemata = array_append(completed_schemata, '+' || dest_schema);
     END LOOP; -- new schema loop end
 
     RETURN completed_schemata;

@@ -6,7 +6,7 @@ import sys
 
 
 if len(sys.argv) < 3:
-    print(f"Usage {os.path.basename(sys.args[0])} db_url", file=sys.stderr)
+    print(f"Usage {os.path.basename(sys.argv[0])} db_url", file=sys.stderr)
     sys.exit(1)
 
 

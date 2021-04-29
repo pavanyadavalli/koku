@@ -105,6 +105,9 @@ class Tenant(TenantMixin):
         ")"
     )
 
+    schema_created = models.BooleanField(default=False)
+    schema_create_running = models.BooleanField(default=False)
+
     # Override the mixin domain url to make it nullable, non-unique
     domain_url = None
 

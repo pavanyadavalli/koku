@@ -37,6 +37,11 @@ from .migration_sql_helpers import find_db_functions_dir
 
 LOG = logging.getLogger(__name__)
 
+
+class CloneSchemaError(Exception):
+    pass
+
+
 engines = {
     "sqlite": "django.db.backends.sqlite3",
     "postgresql": "tenant_schemas.postgresql_backend",
@@ -79,23 +84,47 @@ def config():
     return _cert_config(db_config, database_cert)
 
 
-def dbfunc_exists(connection, function_schema, function_name, function_signature):
+def dbfunc_not_exists(connection, function_map):
     """
-    Test that the migration check database function exists by
-    checking the existence of the function signature.
+    Based on the function map of functions expected to exist by schema,
+    return the functions from the map that do not exist
+    Args:
+        connection : connection to db
+        function_map (dict) : {schema_name: {func_name: full func sig}}
     """
     sql = """
-select p.pronamespace::regnamespace::text || '.' || p.proname ||
-       '(' || pg_get_function_arguments(p.oid) || ')' as funcsig
-  from pg_proc p
- where pronamespace = %s::regnamespace
-   and proname = %s;
+select p.funcname,
+       p.funcsig,
+       (f.proname is not null) "exists"
+  from unnest(%(fnames)s, %(fsigs)s) as p(funcname, funcsig)
+  left
+  join pg_proc f
+    on f.pronamespace = %(fschema)s::regnamespace
+   and f.proname = p.funcname
+   and p.funcsig = f.pronamespace::regnamespace::text || '.' || f.proname ||
+                   '(' || pg_get_function_arguments(f.oid) || ')'
 """
+    res = {}
     with connection.cursor() as cur:
-        cur.execute(sql, (function_schema, function_name))
-        res = cur.fetchone()
+        for function_schema in function_map:
+            res[function_schema] = {}
+            schema_funcs = function_map[function_schema]
+            function_names = []
+            function_sigs = []
+            for func_info in schema_funcs.items():
+                function_names.append(func_info[0])
+                function_sigs.append(func_info[1])
+            cur.execute(sql, {"fschema": function_schema, "fnames": function_names, "fsigs": function_sigs})
+            for rec in cur.fetchall():
+                drec = dict(zip([c.name for c in cur.description], rec))
+                if not drec["exists"]:
+                    res[function_schema][drec["funcname"]] = drec["funcsig"]
 
-    return bool(res) and res[0] == function_signature
+        for schema in list(res):
+            if not res[schema]:
+                del res[schema]
+
+    return res
 
 
 def install_migrations_dbfunc(connection):
@@ -109,8 +138,12 @@ def install_migrations_dbfunc(connection):
 
 
 def verify_migrations_dbfunc(connection):
-    func_sig = "public.migrations_complete(leaf_migrations jsonb, _verbose boolean DEFAULT false)"
-    if not dbfunc_exists(connection, "public", "migrations_complete", func_sig):
+    func_map = {
+        "public": {
+            "migrations_complete": "public.migrations_complete(leaf_migrations jsonb, _verbose boolean DEFAULT false)"
+        }
+    }
+    if dbfunc_not_exists(connection, func_map):
         install_migrations_dbfunc(connection)
 
 

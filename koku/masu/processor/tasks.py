@@ -73,6 +73,7 @@ SUMMARIZE_REPORTS_QUEUE = "summary"
 UPDATE_COST_MODEL_COSTS_QUEUE = "cost_model"
 UPDATE_SUMMARY_TABLES_QUEUE = "summary"
 VACUUM_SCHEMA_QUEUE = "summary"
+TENANT_CREATE_QUEUE = "tenant_create"
 
 # any additional queues should be added to this list
 QUEUE_LIST = [
@@ -85,6 +86,7 @@ QUEUE_LIST = [
     UPDATE_COST_MODEL_COSTS_QUEUE,
     UPDATE_SUMMARY_TABLES_QUEUE,
     VACUUM_SCHEMA_QUEUE,
+    TENANT_CREATE_QUEUE,
 ]
 
 
@@ -316,8 +318,8 @@ def summarize_reports(reports_to_summarize, queue_name=None):
                 ).apply_async(queue=queue_name or UPDATE_SUMMARY_TABLES_QUEUE)
 
 
-@celery_app.task(name="masu.processor.tasks.update_summary_tables", queue=UPDATE_SUMMARY_TABLES_QUEUE)
-def update_summary_tables(  # noqa: C901
+@celery_app.task(name="masu.processor.tasks.update_summary_tables", queue=UPDATE_SUMMARY_TABLES_QUEUE)  # noqa: C901
+def update_summary_tables(
     schema_name,
     provider,
     provider_uuid,
@@ -536,8 +538,12 @@ def update_cost_model_costs(
         worker_cache.release_single_task(task_name, cache_args)
 
 
-@celery_app.task(name="masu.processor.tasks.refresh_materialized_views", queue=REFRESH_MATERIALIZED_VIEWS_QUEUE)
-def refresh_materialized_views(  # noqa: C901
+rmv_name = "masu.processor.tasks.refresh_materialized_views"
+rmv_queue = REFRESH_MATERIALIZED_VIEWS_QUEUE
+
+
+@celery_app.task(name=rmv_name, queue=rmv_queue)  # noqa: C901
+def refresh_materialized_views(
     schema_name, provider_type, manifest_id=None, provider_uuid=None, synchronous=False, queue_name=None
 ):
     """Refresh the database's materialized views for reporting."""
@@ -644,8 +650,8 @@ def normalize_table_options(table_options):
 # At this time, no table parameter will be lowered past the known production engine
 # setting of 0.2 by default. However this function's settings can be overridden via the
 # AUTOVACUUM_TUNING environment variable. See below.
-@celery_app.task(name="masu.processor.tasks.autovacuum_tune_schema", queue_name=VACUUM_SCHEMA_QUEUE)
-def autovacuum_tune_schema(schema_name):  # noqa: C901
+@celery_app.task(name="masu.processor.tasks.autovacuum_tune_schema", queue_name=VACUUM_SCHEMA_QUEUE)  # noqa: C901
+def autovacuum_tune_schema(schema_name):
     """Set the autovacuum table settings based on table size for the specified schema."""
     table_sql = """
 SELECT s.relname as "table_name",

@@ -28,20 +28,12 @@ from tenant_schemas.models import TenantMixin
 from tenant_schemas.postgresql_backend.base import _is_valid_schema_name
 from tenant_schemas.utils import schema_exists
 
-from koku.database import dbfunc_exists
-from koku.migration_sql_helpers import apply_sql_file
-from koku.migration_sql_helpers import find_db_functions_dir
+from koku.database import CloneSchemaError
+from koku.tasks import create_tenant_schema
+from masu.processor.tasks import TENANT_CREATE_QUEUE
 
 
 LOG = logging.getLogger(__name__)
-
-
-class CloneSchemaError(Exception):
-    pass
-
-
-class CloneSchemaFuncMissing(CloneSchemaError):
-    pass
 
 
 class CloneSchemaTemplateMissing(CloneSchemaError):
@@ -94,16 +86,6 @@ class Tenant(TenantMixin):
     # so the template schema name is going to get more inline with the
     # customer account schema names
     _TEMPLATE_SCHEMA = os.environ.get("TEMPLATE_SCHEMA", "template0")
-    _CLONE_SCHEMA_FUNC_FILENAME = os.path.join(find_db_functions_dir(), "clone_schema.sql")
-    _CLONE_SCHEMA_FUNC_SCHEMA = "public"
-    _CLONE_SHEMA_FUNC_NAME = "clone_schema"
-    _CLONE_SCHEMA_FUNC_SIG = (
-        f"{_CLONE_SCHEMA_FUNC_SCHEMA}.{_CLONE_SHEMA_FUNC_NAME}("
-        "source_schema text, dest_schema text, "
-        "copy_data boolean DEFAULT false, "
-        "_verbose boolean DEFAULT false"
-        ")"
-    )
 
     schema_created = models.BooleanField(default=False)
     schema_create_running = models.BooleanField(default=False)
@@ -113,23 +95,6 @@ class Tenant(TenantMixin):
 
     # Delete all schemas when a tenant is removed
     auto_drop_schema = True
-
-    def _check_clone_func(self):
-        LOG.info(f'Verify that clone function "{self._CLONE_SCHEMA_FUNC_SIG}" exists')
-        res = dbfunc_exists(
-            conn, self._CLONE_SCHEMA_FUNC_SCHEMA, self._CLONE_SHEMA_FUNC_NAME, self._CLONE_SCHEMA_FUNC_SIG
-        )
-        if not res:
-            LOG.warning(f'Clone function "{self._CLONE_SCHEMA_FUNC_SIG}" does not exist')
-            LOG.info(f'Creating clone function "{self._CLONE_SCHEMA_FUNC_SIG}"')
-            apply_sql_file(conn.schema_editor(), self._CLONE_SCHEMA_FUNC_FILENAME, literal_placeholder=True)
-            res = dbfunc_exists(
-                conn, self._CLONE_SCHEMA_FUNC_SCHEMA, self._CLONE_SHEMA_FUNC_NAME, self._CLONE_SCHEMA_FUNC_SIG
-            )
-        else:
-            LOG.info("Clone function exists")
-
-        return res
 
     def _verify_template(self, verbosity=1):
         LOG.info(f'Verify that template schema "{self._TEMPLATE_SCHEMA}" exists')
@@ -144,22 +109,6 @@ class Tenant(TenantMixin):
         LOG.info(f"{str(res)}")
 
         return res
-
-    #     def _clone_schema(self):
-    #         result = None
-    #         # This db func will clone the schema objects
-    #         # bypassing the time it takes to run migrations
-    #         sql = """
-    # select public.clone_schema(%s, %s, copy_data => true) as "clone_result";
-    # """
-    #         LOG.info(f'Cloning template schema "{self._TEMPLATE_SCHEMA}" to "{self.schema_name}"')
-
-    #         with conn.cursor() as cur:
-    #             cur.execute(sql, [self._TEMPLATE_SCHEMA, [self.schema_name]])
-    #             result = cur.fetchone()
-    #             cur.execute("SET search_path = public;")
-
-    #         return result[0] if result else False
 
     def _clone_schema(self):
         LOG.info("Loading create script from koku_tenant_create.sql file.")
@@ -181,21 +130,16 @@ class Tenant(TenantMixin):
             LOG.info(f'Using superclass for "{self.schema_name}" schema creation')
             return super().create_schema(check_if_exists=True, sync_schema=sync_schema, verbosity=verbosity)
 
-        db_exc = None
         # Verify name structure
         if not _is_valid_schema_name(self.schema_name):
             exc = ValidationError(f'Invalid schema name: "{self.schema_name}"')
             LOG.error(f"{exc.__class__.__name__}:: {''.join(exc)}")
             raise exc
 
-        with transaction.atomic():
-            # Make sure all of our special pieces are in play
-            ret = self._check_clone_func()
-            if not ret:
-                errmsg = "Missing clone_schema function even after re-applying the function SQL file."
-                LOG.critical(errmsg)
-                raise CloneSchemaFuncMissing(errmsg)
+        # Enqueue message for worker to process schema
+        create_tenant_schema.s().set(queue=TENANT_CREATE_QUEUE)
 
+        with transaction.atomic():
             ret = self._verify_template(verbosity=verbosity)
             if not ret:
                 errmsg = f'Template schema "{self._TEMPLATE_SCHEMA}" does not exist'

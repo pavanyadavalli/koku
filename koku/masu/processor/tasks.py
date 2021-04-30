@@ -73,7 +73,7 @@ SUMMARIZE_REPORTS_QUEUE = "summary"
 UPDATE_COST_MODEL_COSTS_QUEUE = "cost_model"
 UPDATE_SUMMARY_TABLES_QUEUE = "summary"
 VACUUM_SCHEMA_QUEUE = "summary"
-TENANT_CREATE_QUEUE = "tenant_create"
+TENANT_QUEUE = "tenant"
 
 # any additional queues should be added to this list
 QUEUE_LIST = [
@@ -86,7 +86,7 @@ QUEUE_LIST = [
     UPDATE_COST_MODEL_COSTS_QUEUE,
     UPDATE_SUMMARY_TABLES_QUEUE,
     VACUUM_SCHEMA_QUEUE,
-    TENANT_CREATE_QUEUE,
+    TENANT_QUEUE,
 ]
 
 

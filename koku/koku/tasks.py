@@ -18,6 +18,7 @@
 import json
 import logging
 import os
+import threading
 
 from django.conf import settings
 from django.db import connection
@@ -69,17 +70,61 @@ _CLONE_SCHEMA_FUNC_SIG = (
 )
 
 
+class DBSchemaInfo:
+    _lock = threading.lock()
+
+    def __init__(self, schema, logger):
+        self.schema_name = schema
+        self._template_data = None
+        self.log = logger
+
+    @property
+    def template_data(self):
+        if not self._template_data:
+            self.refresh_struct_data()
+        return self._template_data
+
+    def clear_struct_data(self):
+        self._template_data = None
+
+    def refresh_struct_data(self):
+        self.log.info("Getting schema structure")
+        with self._lock:
+            self._template_data = self._read_template_structure()
+
+    def _read_template_structure(self):
+        sql = """
+SELECT public.read_schema(%s);
+"""
+        with connection.cursor() as cur:
+            cur.execute(sql, (self.schema_name,))
+            data = cur.fetchone()
+            if data:
+                if isinstance(data[0], str):
+                    data = json.loads(data[0])
+                else:
+                    data = data[0]
+
+        return data
+
+
+TEMPLATE_STRUCT = DBSchemaInfo(_TEMPLATE_SCHEMA, LOG)
+
+
 @celery_app.task(name="koku.tasks.create_tenant_schema", queue=TENANT_CREATE_QUEUE)
 def create_tenant_schema():
     with transaction.atomic():
         ret = _check_clone_func()
         if ret:
-            errmsg = "Missing clone_schema function even after re-applying the function SQL file."
+            errmsg = "Missing schema copy functions even after re-applying the function SQL file."
             LOG.critical(errmsg)
             raise CloneSchemaFuncMissing(errmsg)
 
-        LOG.debug(f"Reading structure for template schema {_TEMPLATE_SCHEMA}")
-        template_structure = _read_template_structure()
+        LOG.debug(f"Getting structure for template schema {_TEMPLATE_SCHEMA}")
+        template_structure = TEMPLATE_STRUCT.template_data
+
+    if not template_structure:
+        return False
 
     schema_batch = [None]
 
@@ -99,21 +144,7 @@ def create_tenant_schema():
                 if skipped:
                     LOG.info(f"Skipped existing schema: {', '.join(skipped)}")
 
-
-def _read_template_structure():
-    sql = """
-SELECT public.read_schema(%s);
-"""
-    with connection.cursor() as cur:
-        cur.execute(sql, (_TEMPLATE_SCHEMA,))
-        data = cur.fetchone()
-        if data:
-            if isinstance(data[0], str):
-                data = json.loads(data[0])
-            else:
-                data = data[0]
-
-    return data
+    return True
 
 
 def _create_schema(template_structure, schema_batch):
@@ -186,6 +217,8 @@ def _check_clone_func():
             for func in res[schema]:
                 LOG.info(f'Creating clone function "{func}"')
                 apply_sql_file(connection.schema_editor(), func_file_map[func], literal_placeholder=True)
+
+        connection.set_schema_to_public()
 
         res = dbfunc_not_exists(connection, clone_func_map)
         if res:

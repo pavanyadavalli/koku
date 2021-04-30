@@ -23,14 +23,12 @@ from uuid import uuid4
 from django.core.exceptions import ValidationError
 from django.db import connection as conn
 from django.db import models
-from django.db import transaction
 from tenant_schemas.models import TenantMixin
 from tenant_schemas.postgresql_backend.base import _is_valid_schema_name
 from tenant_schemas.utils import schema_exists
 
 from koku.database import CloneSchemaError
 from koku.tasks import create_tenant_schema
-from masu.processor.tasks import TENANT_CREATE_QUEUE
 
 
 LOG = logging.getLogger(__name__)
@@ -137,42 +135,8 @@ class Tenant(TenantMixin):
             raise exc
 
         # Enqueue message for worker to process schema
-        create_tenant_schema.s().set(queue=TENANT_CREATE_QUEUE)
+        create_tenant_schema.delay()
 
-        with transaction.atomic():
-            ret = self._verify_template(verbosity=verbosity)
-            if not ret:
-                errmsg = f'Template schema "{self._TEMPLATE_SCHEMA}" does not exist'
-                LOG.critical(errmsg)
-                raise CloneSchemaTemplateMissing(errmsg)
-
-            # Always check to see if the schema exists!
-            LOG.info(f"Check if target schema {self.schema_name} already exists")
-            if schema_exists(self.schema_name):
-                LOG.warning(f'Schema "{self.schema_name}" already exists. Exit with False.')
-                return False
-
-            # Clone the schema. The database function will check
-            # that the source schema exists and the destination schema does not.
-            try:
-                self._clone_schema()
-            except Exception as dbe:
-                db_exc = dbe
-                LOG.error(
-                    f"""Exception {dbe.__class__.__name__} cloning"""
-                    + f""" "{self._TEMPLATE_SCHEMA}" to "{self.schema_name}": {str(dbe)}"""
-                )
-                LOG.info("Setting transaction to exit with ROLLBACK")
-                transaction.set_rollback(True)  # Set this transaction context to issue a rollback on exit
-            else:
-                LOG.info(f'Successful clone of "{self._TEMPLATE_SCHEMA}" to "{self.schema_name}"')
-
-        # Set schema to public (even if there was an exception)
-        with transaction.atomic():
-            LOG.info("Reset DB search path to public")
-            conn.set_schema_to_public()
-
-        if db_exc:
-            raise db_exc
+        conn.set_schema_to_public()
 
         return True

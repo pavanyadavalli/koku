@@ -36,6 +36,7 @@ DECLARE
     jobject jsonb;
     src_schema text;
     dst_schema text;
+    dest_schema text;
     source_obj text;
     dest_obj text;
     ix_stmt text;
@@ -734,7 +735,7 @@ BEGIN
         /*
          * Mark that the dest_schema object creation has been successful
          */
-        array_append(completed_schemata, dest_schema);
+        completed_schemata = array_append(completed_schemata, dest_schema);
     END LOOP; -- new schema loop end
 
     RETURN completed_schemata;

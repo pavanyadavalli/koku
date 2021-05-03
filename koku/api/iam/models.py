@@ -28,7 +28,6 @@ from tenant_schemas.postgresql_backend.base import _is_valid_schema_name
 from tenant_schemas.utils import schema_exists
 
 from koku.database import CloneSchemaError
-from koku.tasks import create_tenant_schema
 
 
 LOG = logging.getLogger(__name__)
@@ -94,6 +93,14 @@ class Tenant(TenantMixin):
     # Delete all schemas when a tenant is removed
     auto_drop_schema = True
 
+    def __repr__(self):
+        return (
+            f'<Tenant: "{self.schema_name}" (S:{str(self.schema_created)[0]}/R: {str(self.schema_create_running)[0]})>'
+        )
+
+    def __str__(self):
+        return self.schema_name
+
     def _verify_template(self, verbosity=1):
         LOG.info(f'Verify that template schema "{self._TEMPLATE_SCHEMA}" exists')
         # This is using the teanant table data as the source of truth which can be dangerous.
@@ -124,15 +131,28 @@ class Tenant(TenantMixin):
         If schema is "public" or matches _TEMPLATE_SCHEMA, then use the superclass' create_schema() method.
         Else, verify the template and inputs and use the database clone function.
         """
+        # fmt: off
+        from koku.tasks import create_tenant_schema
+        # fmt: on
+
         if self.schema_name in ("public", self._TEMPLATE_SCHEMA):
             LOG.info(f'Using superclass for "{self.schema_name}" schema creation')
-            return super().create_schema(check_if_exists=True, sync_schema=sync_schema, verbosity=verbosity)
+            self.schema_create_running = True
+            self.save()
+            res = super().create_schema(check_if_exists=True, sync_schema=sync_schema, verbosity=verbosity)
+            self.schema_created = True
+            self.schema_create_running = False
+            self.save()
+            return res
 
         # Verify name structure
         if not _is_valid_schema_name(self.schema_name):
             exc = ValidationError(f'Invalid schema name: "{self.schema_name}"')
             LOG.error(f"{exc.__class__.__name__}:: {''.join(exc)}")
             raise exc
+
+        if not self._verify_template():
+            raise CloneSchemaTemplateMissing(f'The template schema "{self._TEMPLATE_SCHEMA}"')
 
         # Enqueue message for worker to process schema
         create_tenant_schema.delay()

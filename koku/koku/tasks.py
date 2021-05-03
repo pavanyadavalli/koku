@@ -22,20 +22,23 @@ import threading
 
 from django.conf import settings
 from django.db import connection
-from django.db import transaction
 
 from .database import CloneSchemaError
 from .database import dbfunc_not_exists
-from .migration_sql_helpers import apply_sql_file
 from .migration_sql_helpers import find_db_functions_dir
 from koku import celery_app
-from masu.processor.tasks import TENANT_CREATE_QUEUE
+from masu.processor.tasks import TENANT_QUEUE
+
+# from .migration_sql_helpers import apply_sql_file
 
 # from masu.processor.worker_cache import WorkerCache
 
 
 class CloneSchemaFuncMissing(CloneSchemaError):
     pass
+
+
+__CONN = connection
 
 
 LOG = logging.getLogger(__name__)
@@ -71,11 +74,12 @@ _CLONE_SCHEMA_FUNC_SIG = (
 
 
 class DBSchemaInfo:
-    _lock = threading.lock()
+    _lock = threading.Lock()
 
     def __init__(self, schema, logger):
         self.schema_name = schema
         self._template_data = None
+        self._clone_funcs_exist = None
         self.log = logger
 
     @property
@@ -96,25 +100,58 @@ class DBSchemaInfo:
         sql = """
 SELECT public.read_schema(%s);
 """
-        with connection.cursor() as cur:
+        with __CONN.cursor() as cur:
             cur.execute(sql, (self.schema_name,))
             data = cur.fetchone()
-            if data:
-                if isinstance(data[0], str):
-                    data = json.loads(data[0])
-                else:
-                    data = data[0]
+
+        if data:
+            if isinstance(data[0], str):
+                data = json.loads(data[0])
+            else:
+                data = data[0]
 
         return data
+
+    @property
+    def clone_funcs_exist(self):
+        if self._clone_funcs_exist is None:
+            self._verify_clone_funcs()
+
+        return self._clone_funcs_exist
+
+    def _verify_clone_funcs(self):
+        clone_func_map = {
+            _CLONE_SCHEMA_FUNC_SCHEMA: {
+                _CLONE_SHEMA_FUNC_NAME: _CLONE_SCHEMA_FUNC_SIG,
+                _READ_SCHEMA_FUNC_NAME: _READ_SCHEMA_FUNC_SIG,
+                _CREATE_SCHEMA_FUNC_NAME: _CREATE_SCHEMA_FUNC_SIG,
+            }
+        }
+        # func_file_map = {
+        #     _CLONE_SHEMA_FUNC_NAME: _CLONE_SCHEMA_FUNC_FILENAME,
+        #     _READ_SCHEMA_FUNC_NAME: _READ_SCHEMA_FUNC_FILENAME,
+        #     _CREATE_SCHEMA_FUNC_NAME: _CREATE_SCHEMA_FUNC_FILENAME,
+        # }
+
+        self.log.info("Verify that clone function(s) exists")
+        with self._lock:
+            res = dbfunc_not_exists(connection, clone_func_map)
+        if res:
+            missing_functions = [f"{s}.{f}" for s in res for f in res[s]]
+            self.log.error(f"Clone functions {', '.join(missing_functions)} are missing.")
+        else:
+            self.log.info("Clone functions exist")
+
+        self._clone_funcs_exist = bool(res)
 
 
 TEMPLATE_STRUCT = DBSchemaInfo(_TEMPLATE_SCHEMA, LOG)
 
 
-@celery_app.task(name="koku.tasks.create_tenant_schema", queue=TENANT_CREATE_QUEUE)
+@celery_app.task(name="koku.tasks.create_tenant_schema", queue=TENANT_QUEUE)
 def create_tenant_schema():
-    with transaction.atomic():
-        ret = _check_clone_func()
+    try:
+        ret = TEMPLATE_STRUCT.clone_funcs_exist
         if ret:
             errmsg = "Missing schema copy functions even after re-applying the function SQL file."
             LOG.critical(errmsg)
@@ -122,6 +159,9 @@ def create_tenant_schema():
 
         LOG.debug(f"Getting structure for template schema {_TEMPLATE_SCHEMA}")
         template_structure = TEMPLATE_STRUCT.template_data
+    except Exception as e:
+        LOG.error(f"{e.__class__.__name__}: {str(e)}")
+        raise e
 
     if not template_structure:
         return False
@@ -129,7 +169,7 @@ def create_tenant_schema():
     schema_batch = [None]
 
     while schema_batch:
-        with transaction.atomic():
+        try:
             LOG.info("Getting tenant batch")
             schema_batch = _get_tenant_batch()
             if schema_batch:
@@ -143,6 +183,9 @@ def create_tenant_schema():
                 LOG.info(f"Created schemata {', '.join(created)}")
                 if skipped:
                     LOG.info(f"Skipped existing schema: {', '.join(skipped)}")
+        except Exception as e:
+            LOG.error(f"{e.__class__.__name__}: {str(e)}")
+            raise e
 
     return True
 
@@ -192,40 +235,3 @@ UPDATE public.api_tenant
 """
     with connection.cursor() as cur:
         cur.execute(sql, (tenant_batch,))
-
-
-def _check_clone_func():
-    clone_func_map = {
-        _CLONE_SCHEMA_FUNC_SCHEMA: {
-            _CLONE_SHEMA_FUNC_NAME: _CLONE_SCHEMA_FUNC_SIG,
-            _READ_SCHEMA_FUNC_NAME: _READ_SCHEMA_FUNC_SIG,
-            _CREATE_SCHEMA_FUNC_NAME: _CREATE_SCHEMA_FUNC_SIG,
-        }
-    }
-    func_file_map = {
-        _CLONE_SHEMA_FUNC_NAME: _CLONE_SCHEMA_FUNC_FILENAME,
-        _READ_SCHEMA_FUNC_NAME: _READ_SCHEMA_FUNC_FILENAME,
-        _CREATE_SCHEMA_FUNC_NAME: _CREATE_SCHEMA_FUNC_FILENAME,
-    }
-
-    LOG.info("Verify that clone function(s) exists")
-    res = dbfunc_not_exists(connection, clone_func_map)
-    if res:
-        LOG.warning("Clone function(s) missing")
-        for schema in res:
-            connection.cursor().execute(f"SET SEARCH_PATH = {schema} ;")
-            for func in res[schema]:
-                LOG.info(f'Creating clone function "{func}"')
-                apply_sql_file(connection.schema_editor(), func_file_map[func], literal_placeholder=True)
-
-        connection.set_schema_to_public()
-
-        res = dbfunc_not_exists(connection, clone_func_map)
-        if res:
-            missing_functions = [f"{s}.{f}" for s in res for f in res[s]]
-            LOG.error(f"Clone functions {', '.join(missing_functions)} still missing after application.")
-            raise CloneSchemaFuncMissing(missing_functions)
-    else:
-        LOG.info("Clone functions exist")
-
-    return res

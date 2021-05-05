@@ -118,8 +118,9 @@ class KokuTenantSchemaExistsMiddleware(MiddlewareMixin):
     """A middleware to check if schema exists for Tenant."""
 
     def process_request(self, request):
-        if not schema_exists(request.tenant.schema_name):
-            return JsonResponse(data={})
+        if request.path != reverse("user-access"):
+            if not schema_exists(request.tenant.schema_name):
+                return JsonResponse(data={})
 
 
 class KokuTenantMiddleware(BaseTenantMiddleware):
@@ -305,6 +306,8 @@ class IdentityHeaderMiddleware(MiddlewareMixin):
                 "is_admin": is_admin,
             }
             LOG.info(stmt)
+            # create_schema = bool(settings.DEVELOPMENT and request.user.req_id == "DEVELOPMENT")
+            create_schema = False
             try:
                 if account not in IdentityHeaderMiddleware.customer_cache:
                     IdentityHeaderMiddleware.customer_cache[account] = Customer.objects.filter(
@@ -314,7 +317,7 @@ class IdentityHeaderMiddleware(MiddlewareMixin):
                 create_schema = bool(settings.DEVELOPMENT and request.user.req_id == "DEVELOPMENT")
                 customer = IdentityHeaderMiddleware.create_customer(account, create_schema)
             except Customer.DoesNotExist:
-                customer = IdentityHeaderMiddleware.create_customer(account)
+                customer = IdentityHeaderMiddleware.create_customer(account, create_schema)
             except OperationalError as err:
                 LOG.error("IdentityHeaderMiddleware exception: %s", err)
                 DB_CONNECTION_ERRORS_COUNTER.inc()

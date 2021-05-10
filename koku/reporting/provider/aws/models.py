@@ -273,6 +273,7 @@ class AWSCostEntryLineItemDailySummary(models.Model):
     tax_type = models.TextField(null=True)
     tags = JSONField(null=True)
     source_uuid = models.UUIDField(unique=False, null=True)
+    summary_level = models.CharField(null=True, default="D")  # Daily, Weekly, Bi-Weekly, Monthly, Quarterly, Year
 
 
 class AWSCostEntryPricing(models.Model):

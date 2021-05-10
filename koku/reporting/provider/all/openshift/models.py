@@ -122,6 +122,8 @@ class OCPAllCostLineItemDailySummary(models.Model):
 
     source_uuid = models.UUIDField(unique=False, null=True)
 
+    summary_level = models.CharField(null=True, default="D")  # Daily, Weekly, Bi-Weekly, Monthly, Quarterly, Year
+
 
 # Materialized Views for UI Reporting
 class OCPAllCostSummary(models.Model):
@@ -499,3 +501,5 @@ class OCPAllCostLineItemProjectDailySummary(models.Model):
     currency_code = models.CharField(max_length=10, null=True)
 
     source_uuid = models.UUIDField(unique=False, null=True)
+
+    summary_level = models.CharField(null=True, default="D")  # Daily, Weekly, Bi-Weekly, Monthly, Quarterly, Year

@@ -209,6 +209,7 @@ class GCPCostEntryLineItemDailySummary(models.Model):
     markup_cost = models.DecimalField(max_digits=24, decimal_places=9, null=True)
     tags = JSONField(null=True)
     source_uuid = models.UUIDField(unique=False, null=True)
+    summary_level = models.CharField(null=True, default="D")  # Daily, Weekly, Bi-Weekly, Monthly, Quarterly, Year
 
 
 class GCPEnabledTagKeys(models.Model):

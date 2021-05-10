@@ -10,31 +10,31 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             """
 alter table reporting_ocpallcostlineitem_daily_summary
-  add column summary_level char;
+  add column summary_level char(1);
 """
         ),
         migrations.RunSQL(
             """
 alter table reporting_ocpusagelineitem_daily_summary
-  add column summary_level char;
+  add column summary_level char(1);
 """
         ),
         migrations.RunSQL(
             """
 alter table reporting_gcpcostentrylineitem_daily_summary
-  add column summary_level char;
+  add column summary_level char(1);
 """
         ),
         migrations.RunSQL(
             """
 alter table reporting_azurecostentrylineitem_daily_summary
-  add column summary_level char;
+  add column summary_level char(1);
 """
         ),
         migrations.RunSQL(
             """
 alter table reporting_awscostentrylineitem_daily_summary
-  add column summary_level char;
+  add column summary_level char(1);
 """
         ),
     ]

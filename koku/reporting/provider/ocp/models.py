@@ -320,7 +320,9 @@ class OCPUsageLineItemDailySummary(models.Model):
 
     source_uuid = models.UUIDField(unique=False, null=True)
 
-    summary_level = models.CharField(null=True, default="D")  # Daily, Weekly, Bi-Weekly, Monthly, Quarterly, Year
+    summary_level = models.CharField(
+        null=True, max_length=1, default="D"
+    )  # Daily, Weekly, Bi-Weekly, Monthly, Quarterly, Year
 
 
 class OCPTagsValues(models.Model):

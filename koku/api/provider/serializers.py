@@ -315,7 +315,6 @@ class ProviderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(error_obj(key, message))
         return user, customer
 
-    @transaction.atomic
     def create(self, validated_data):
         """Create a provider from validated data."""
         user, customer = self.get_request_info()
@@ -327,11 +326,6 @@ class ProviderSerializer(serializers.ModelSerializer):
         credentials = authentication.get("credentials")
         billing_source = validated_data.pop("billing_source")
         data_source = billing_source.get("data_source")
-
-        if self._is_demo_account(provider_type, credentials):
-            LOG.info("Customer account is a DEMO account. Skipping cost_usage_source_ready check.")
-        else:
-            interface.cost_usage_source_ready(credentials, data_source)
 
         bill, __ = ProviderBillingSource.objects.get_or_create(**billing_source)
         auth, __ = ProviderAuthentication.objects.get_or_create(**authentication)
@@ -361,6 +355,15 @@ class ProviderSerializer(serializers.ModelSerializer):
         customer.date_updated = DateHelper().now_utc
         customer.save()
 
+        if self._is_demo_account(provider_type, credentials):
+            LOG.info("Customer account is a DEMO account. Skipping cost_usage_source_ready check.")
+        else:
+            try:
+                interface.cost_usage_source_ready(credentials, data_source)
+            except serializers.ValidationError as error:
+                provider.active = False
+                provider.save()
+                raise error
         return provider
 
     def update(self, instance, validated_data):

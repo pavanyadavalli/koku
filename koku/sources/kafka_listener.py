@@ -256,6 +256,9 @@ def execute_koku_provider_op(msg):
             f" source_id: {provider.source_id}. Reason: {account_error}"
         )
         LOG.warning(err_msg)
+
+        # TODO: Fix Me: This is assuming source uuid == provider uuid
+        storage.add_provider_koku_uuid(provider.source_id, provider.source_uuid)
         sources_client.set_source_status(account_error)
     except SkipStatusPush as error:
         LOG.info(f"[provider_operation] platform sources status push skipped. Reason: {error}")

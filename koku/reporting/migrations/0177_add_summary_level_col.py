@@ -6,4 +6,35 @@ class Migration(migrations.Migration):
 
     dependencies = [("reporting", "0176_update_aws_enabled_keys")]
 
-    operations = []
+    operations = [
+        migrations.RunSQL(
+            """
+alter table reporting_ocpallcostlineitem_daily_summary
+  add column summary_level char;
+"""
+        ),
+        migrations.RunSQL(
+            """
+alter table reporting_ocpusagelineitem_daily_summary
+  add column summary_level char;
+"""
+        ),
+        migrations.RunSQL(
+            """
+alter table reporting_gcpcostentrylineitem_daily_summary
+  add column summary_level char;
+"""
+        ),
+        migrations.RunSQL(
+            """
+alter table reporting_azurecostentrylineitem_daily_summary
+  add column summary_level char;
+"""
+        ),
+        migrations.RunSQL(
+            """
+alter table reporting_awscostentrylineitem_daily_summary
+  add column summary_level char;
+"""
+        ),
+    ]

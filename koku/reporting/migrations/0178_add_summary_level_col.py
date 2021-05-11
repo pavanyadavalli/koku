@@ -4,7 +4,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
 
-    dependencies = [("reporting", "0176_update_aws_enabled_keys")]
+    dependencies = [("reporting", "0177_auto_20210506_1650")]
 
     operations = [
         migrations.RunSQL(

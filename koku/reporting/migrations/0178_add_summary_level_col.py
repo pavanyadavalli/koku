@@ -9,12 +9,6 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunSQL(
             """
-alter table reporting_ocpallcostlineitem_daily_summary
-  add column summary_level char(1);
-"""
-        ),
-        migrations.RunSQL(
-            """
 alter table reporting_ocpusagelineitem_daily_summary
   add column summary_level char(1);
 """

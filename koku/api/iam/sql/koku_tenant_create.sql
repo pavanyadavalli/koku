@@ -336,7 +336,8 @@ CREATE TABLE reporting_awscostentrylineitem_daily_summary (
     account_alias_id integer,
     cost_entry_bill_id integer,
     organizational_unit_id integer,
-    uuid uuid NOT NULL
+    uuid uuid NOT NULL,
+    summary_level char(1)
 )
 PARTITION BY RANGE (usage_start);
 
@@ -1005,7 +1006,8 @@ CREATE TABLE reporting_awscostentrylineitem_daily_summary_default (
     account_alias_id integer,
     cost_entry_bill_id integer,
     organizational_unit_id integer,
-    uuid uuid NOT NULL
+    uuid uuid NOT NULL,
+    summary_level char(1)
 );
 ALTER TABLE ONLY reporting_awscostentrylineitem_daily_summary ATTACH PARTITION reporting_awscostentrylineitem_daily_summary_default DEFAULT;
 
@@ -1231,7 +1233,8 @@ CREATE TABLE reporting_azurecostentrylineitem_daily_summary (
     source_uuid uuid,
     cost_entry_bill_id integer NOT NULL,
     meter_id integer,
-    uuid uuid NOT NULL
+    uuid uuid NOT NULL,
+    summary_level char(1)
 )
 PARTITION BY RANGE (usage_start);
 
@@ -1517,7 +1520,8 @@ CREATE TABLE reporting_azurecostentrylineitem_daily_summary_default (
     source_uuid uuid,
     cost_entry_bill_id integer NOT NULL,
     meter_id integer,
-    uuid uuid NOT NULL
+    uuid uuid NOT NULL,
+    summary_level char(1)
 );
 ALTER TABLE ONLY reporting_azurecostentrylineitem_daily_summary ATTACH PARTITION reporting_azurecostentrylineitem_daily_summary_default DEFAULT;
 
@@ -1680,7 +1684,8 @@ CREATE TABLE reporting_gcpcostentrylineitem_daily_summary (
     markup_cost numeric(24,9),
     tags jsonb,
     source_uuid uuid,
-    cost_entry_bill_id integer NOT NULL
+    cost_entry_bill_id integer NOT NULL,
+    summary_level char(1)
 )
 PARTITION BY RANGE (usage_start);
 
@@ -2188,7 +2193,8 @@ CREATE TABLE reporting_gcpcostentrylineitem_daily_summary_default (
     markup_cost numeric(24,9),
     tags jsonb,
     source_uuid uuid,
-    cost_entry_bill_id integer NOT NULL
+    cost_entry_bill_id integer NOT NULL,
+    summary_level char(1)
 );
 ALTER TABLE ONLY reporting_gcpcostentrylineitem_daily_summary ATTACH PARTITION reporting_gcpcostentrylineitem_daily_summary_default DEFAULT;
 
@@ -2380,7 +2386,8 @@ CREATE TABLE reporting_ocpusagelineitem_daily_summary (
     monthly_cost_type text,
     source_uuid uuid,
     report_period_id integer,
-    uuid uuid NOT NULL
+    uuid uuid NOT NULL,
+    summary_level char(1)
 )
 PARTITION BY RANGE (usage_start);
 
@@ -3938,7 +3945,8 @@ CREATE TABLE reporting_ocpusagelineitem_daily_summary_default (
     monthly_cost_type text,
     source_uuid uuid,
     report_period_id integer,
-    uuid uuid NOT NULL
+    uuid uuid NOT NULL,
+    summary_level char(1)
 );
 ALTER TABLE ONLY reporting_ocpusagelineitem_daily_summary ATTACH PARTITION reporting_ocpusagelineitem_daily_summary_default DEFAULT;
 
@@ -4451,7 +4459,8 @@ values
 (153, 'reporting_common', '0001_initial', '2021-04-26 19:57:21.318581+00'::timestamptz),
 (154, 'cost_models', '0001_initial', '2021-04-26 19:57:21.320766+00'::timestamptz),
 (155, 'api', '0044_auto_20210505_1747', '2021-05-05 18:43:58.190203+00'::timestamptz),
-(156, 'reporting', '0177_auto_20210506_1650', '2021-05-06 17:07:16.960105+00'::timestamptz);;
+(156, 'reporting', '0177_auto_20210506_1650', '2021-05-06 17:07:16.960105+00'::timestamptz),
+(157, 'reporting', '0178_add_summary_level_col', '2021-05-11 17:07:16.960105+00'::timestamptz)
 ;
 
 

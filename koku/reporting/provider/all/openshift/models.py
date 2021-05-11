@@ -122,10 +122,6 @@ class OCPAllCostLineItemDailySummary(models.Model):
 
     source_uuid = models.UUIDField(unique=False, null=True)
 
-    summary_level = models.CharField(
-        null=True, max_length=1, default="D"
-    )  # Daily, Weekly, Bi-Weekly, Monthly, Quarterly, Year
-
 
 # Materialized Views for UI Reporting
 class OCPAllCostSummary(models.Model):

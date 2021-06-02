@@ -1343,7 +1343,13 @@ class TestWorkerCacheThrottling(MasuTestCase):
 
     def test_get_matview_info_for_schema(self):
         """Test that the proper views are returned for each known provider type"""
-        _get_matview_info_for_schema(self.schema, ())
+        matviews = _get_matviews_for_provider_type(Provider.PROVIDER_AWS)
+        self.assertNotEqual(len(matviews), 0)
+        matview_tables = {m._meta.db_table for m in matviews}
+        matview_info = _get_matview_info_for_schema(self.schema, matviews)
+        self.assertNotEqual(len(matview_info), 0)
+        self.assertTrue(all(m in matview_tables for m in matview_info))
+        self.assertLessEqual(len(matview_info), len(matviews))
 
 
 class TestRemoveStaleTenants(MasuTestCase):

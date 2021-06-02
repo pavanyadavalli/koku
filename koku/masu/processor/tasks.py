@@ -25,6 +25,7 @@ from decimal import InvalidOperation
 import ciso8601
 from celery import chain
 from dateutil import parser
+from django.conf import settings as koku_settings
 from django.db import connection
 from django.db.utils import IntegrityError
 from tenant_schemas.utils import schema_context
@@ -63,6 +64,11 @@ from reporting.models import OCP_ON_AZURE_MATERIALIZED_VIEWS
 from reporting.models import OCP_ON_INFRASTRUCTURE_MATERIALIZED_VIEWS
 
 LOG = logging.getLogger(__name__)
+
+DEFAULT_CONCURRENT_REFRESH_THRESHOLD = 1000 ** 3 * 500
+CONCURRENT_REFRESH_THRESHOLD = (
+    getattr(koku_settings, "CONCURRENT_REFRESH_SIZE_THRESHOLD", None) or DEFAULT_CONCURRENT_REFRESH_THRESHOLD
+)
 
 DEFAULT = "celery"
 GET_REPORT_FILES_QUEUE = "download"
@@ -318,8 +324,8 @@ def summarize_reports(reports_to_summarize, queue_name=None):
                 ).apply_async(queue=queue_name or UPDATE_SUMMARY_TABLES_QUEUE)
 
 
-@celery_app.task(name="masu.processor.tasks.update_summary_tables", queue=UPDATE_SUMMARY_TABLES_QUEUE)
-def update_summary_tables(  # noqa: C901
+@celery_app.task(name="masu.processor.tasks.update_summary_tables", queue=UPDATE_SUMMARY_TABLES_QUEUE)  # noqa: C901
+def update_summary_tables(
     schema_name,
     provider,
     provider_uuid,
@@ -538,8 +544,74 @@ def update_cost_model_costs(
         worker_cache.release_single_task(task_name, cache_args)
 
 
-@celery_app.task(name="masu.processor.tasks.refresh_materialized_views", queue=REFRESH_MATERIALIZED_VIEWS_QUEUE)
-def refresh_materialized_views(  # noqa: C901
+def _get_matview_info_for_schema(target_schema, target_matviews):
+    sql = """
+SELECT *,
+       pg_size_pretty(total_bytes) AS total,
+       pg_size_pretty(index_bytes) AS index,
+       pg_size_pretty(toast_bytes) AS toast,
+       pg_size_pretty(table_bytes) AS table
+  FROM (
+         SELECT *,
+                total_bytes - index_bytes - coalesce(toast_bytes,0) AS table_bytes
+           FROM (
+                  SELECT c.oid,
+                         n.nspname AS table_schema,
+                         c.relname AS table_name,
+                         c.reltuples AS row_estimate,
+                         pg_total_relation_size(c.oid) AS total_bytes,
+                         pg_indexes_size(c.oid) AS index_bytes,
+                         pg_total_relation_size(c.reltoastrelid) AS toast_bytes
+                    FROM pg_class c
+                    LEFT
+                    JOIN pg_namespace n
+                      ON n.oid = c.relnamespace
+                   WHERE c.relkind = 'm'
+                     AND n.nspname = %s
+                     AND c.relname = ANY(%s)
+                ) a
+       ) a
+ ORDER
+    BY "total_bytes" desc;
+"""
+    res = {}
+    with connection.cursor() as cur:
+        cur.execute(sql, (target_schema, list(target_matviews)))
+        cols = [c.name for c in cur.description]
+        for rec in cur.fetchall():
+            drec = dict(zip(cols, r) for r in rec)
+            res[drec["table_name"]] = drec
+
+    return res
+
+
+def _get_matviews_for_provider_type(provider_type):
+    materialized_views = ()
+    if provider_type in (Provider.PROVIDER_AWS, Provider.PROVIDER_AWS_LOCAL):
+        materialized_views = (
+            AWS_MATERIALIZED_VIEWS + OCP_ON_AWS_MATERIALIZED_VIEWS + OCP_ON_INFRASTRUCTURE_MATERIALIZED_VIEWS
+        )
+    elif provider_type in (Provider.PROVIDER_OCP):
+        materialized_views = (
+            OCP_MATERIALIZED_VIEWS
+            + OCP_ON_AWS_MATERIALIZED_VIEWS
+            + OCP_ON_AZURE_MATERIALIZED_VIEWS
+            + OCP_ON_INFRASTRUCTURE_MATERIALIZED_VIEWS
+        )
+    elif provider_type in (Provider.PROVIDER_AZURE, Provider.PROVIDER_AZURE_LOCAL):
+        materialized_views = (
+            AZURE_MATERIALIZED_VIEWS + OCP_ON_AZURE_MATERIALIZED_VIEWS + OCP_ON_INFRASTRUCTURE_MATERIALIZED_VIEWS
+        )
+    elif provider_type in (Provider.PROVIDER_GCP, Provider.PROVIDER_GCP_LOCAL):
+        materialized_views = GCP_MATERIALIZED_VIEWS
+
+    return materialized_views
+
+
+@celery_app.task(  # noqa: C901
+    name="masu.processor.tasks.refresh_materialized_views", queue=REFRESH_MATERIALIZED_VIEWS_QUEUE
+)
+def refresh_materialized_views(
     schema_name, provider_type, manifest_id=None, provider_uuid=None, synchronous=False, queue_name=None
 ):
     """Refresh the database's materialized views for reporting."""
@@ -560,30 +632,22 @@ def refresh_materialized_views(  # noqa: C901
             ).apply_async(queue=queue_name or REFRESH_MATERIALIZED_VIEWS_QUEUE)
             return
         worker_cache.lock_single_task(task_name, cache_args, timeout=600)
-    materialized_views = ()
-    if provider_type in (Provider.PROVIDER_AWS, Provider.PROVIDER_AWS_LOCAL):
-        materialized_views = (
-            AWS_MATERIALIZED_VIEWS + OCP_ON_AWS_MATERIALIZED_VIEWS + OCP_ON_INFRASTRUCTURE_MATERIALIZED_VIEWS
-        )
-    elif provider_type in (Provider.PROVIDER_OCP):
-        materialized_views = (
-            OCP_MATERIALIZED_VIEWS
-            + OCP_ON_AWS_MATERIALIZED_VIEWS
-            + OCP_ON_AZURE_MATERIALIZED_VIEWS
-            + OCP_ON_INFRASTRUCTURE_MATERIALIZED_VIEWS
-        )
-    elif provider_type in (Provider.PROVIDER_AZURE, Provider.PROVIDER_AZURE_LOCAL):
-        materialized_views = (
-            AZURE_MATERIALIZED_VIEWS + OCP_ON_AZURE_MATERIALIZED_VIEWS + OCP_ON_INFRASTRUCTURE_MATERIALIZED_VIEWS
-        )
-    elif provider_type in (Provider.PROVIDER_GCP, Provider.PROVIDER_GCP_LOCAL):
-        materialized_views = GCP_MATERIALIZED_VIEWS
+    materialized_views = _get_matviews_for_provider_type(provider_type)
+    matview_info = _get_matview_info_for_schema(schema_name, materialized_views)
     try:
         with schema_context(schema_name):
             for view in materialized_views:
                 table_name = view._meta.db_table
+                view_info = matview_info.get(table_name, {"total_bytes": 0})
+                if view_info["total_bytes"] > CONCURRENT_REFRESH_THRESHOLD:
+                    # This will acquire more strict locks in order to rebuild
+                    refresh_actions = [f"REFRESH MATERIALIZED VIEW {table_name} ;"]
+                else:
+                    # This will acquire less strict locks in order to rebuild
+                    refresh_actions = [f"REFRESH MATERIALIZED VIEW CONCURRENTLY {table_name} ;"]
                 with connection.cursor() as cursor:
-                    cursor.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {table_name}")
+                    for action_sql in refresh_actions:
+                        cursor.execute(action_sql)
                     LOG.info(f"Refreshed {table_name}.")
 
         invalidate_view_cache_for_tenant_and_source_type(schema_name, provider_type)
@@ -646,8 +710,8 @@ def normalize_table_options(table_options):
 # At this time, no table parameter will be lowered past the known production engine
 # setting of 0.2 by default. However this function's settings can be overridden via the
 # AUTOVACUUM_TUNING environment variable. See below.
-@celery_app.task(name="masu.processor.tasks.autovacuum_tune_schema", queue_name=DEFAULT)
-def autovacuum_tune_schema(schema_name):  # noqa: C901
+@celery_app.task(name="masu.processor.tasks.autovacuum_tune_schema", queue_name=DEFAULT)  # noqa: C901
+def autovacuum_tune_schema(schema_name):
     """Set the autovacuum table settings based on table size for the specified schema."""
     table_sql = """
 SELECT s.relname as "table_name",

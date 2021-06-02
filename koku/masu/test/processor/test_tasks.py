@@ -54,6 +54,8 @@ from masu.processor._tasks.process import _process_report_file
 from masu.processor.expired_data_remover import ExpiredDataRemover
 from masu.processor.report_processor import ReportProcessorError
 from masu.processor.report_summary_updater import ReportSummaryUpdaterCloudError
+from masu.processor.tasks import _get_matview_info_for_schema
+from masu.processor.tasks import _get_matviews_for_provider_type
 from masu.processor.tasks import autovacuum_tune_schema
 from masu.processor.tasks import get_report_files
 from masu.processor.tasks import normalize_table_options
@@ -1316,6 +1318,32 @@ class TestWorkerCacheThrottling(MasuTestCase):
         # Let the cache entry expire
         time.sleep(3)
         self.assertFalse(self.single_task_is_running(task_name, cache_args))
+
+    def test_get_matviews_for_provider(self):
+        """Test that the proper views are returned for each known provider type"""
+        provider_type_map = {
+            Provider.PROVIDER_AWS: Provider.PROVIDER_AWS.lower(),
+            Provider.PROVIDER_AWS_LOCAL: Provider.PROVIDER_AWS.lower(),
+            Provider.PROVIDER_AZURE: Provider.PROVIDER_AZURE.lower(),
+            Provider.PROVIDER_AZURE_LOCAL: Provider.PROVIDER_AZURE.lower(),
+            Provider.PROVIDER_GCP: Provider.PROVIDER_GCP.lower(),
+            Provider.PROVIDER_GCP_LOCAL: Provider.PROVIDER_GCP.lower(),
+            Provider.PROVIDER_OCP: Provider.PROVIDER_OCP.lower(),
+        }
+        extras = (
+            "reporting_ocp_cost_summary",
+            "reporting_ocp_cost_summary_by_project",
+            "reporting_ocp_cost_summary_by_node",
+        )
+        for provider_type, provider_type_token in provider_type_map.items():
+            matviews = _get_matviews_for_provider_type(provider_type)
+            self.assertTrue(
+                all(m._meta.db_table in extras or provider_type_token in m._meta.db_table for m in matviews)
+            )
+
+    def test_get_matview_info_for_schema(self):
+        """Test that the proper views are returned for each known provider type"""
+        _get_matview_info_for_schema(self.schema, ())
 
 
 class TestRemoveStaleTenants(MasuTestCase):

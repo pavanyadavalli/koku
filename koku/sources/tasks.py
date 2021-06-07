@@ -19,7 +19,6 @@ import logging
 
 from django.core.exceptions import ObjectDoesNotExist
 
-from api.provider.models import Provider
 from api.provider.models import Sources
 from koku import celery_app
 from masu.processor.tasks import PRIORITY_QUEUE
@@ -36,14 +35,11 @@ LOG = logging.getLogger(__name__)
 @celery_app.task(name="sources.tasks.delete_source", queue=PRIORITY_QUEUE)
 def delete_source(source_id, auth_header, koku_uuid):
     """Delete Provider and Source."""
-    try:
-        LOG.info(f"Deactivating Provider {koku_uuid}")
-        mark_provider_as_inactive(koku_uuid)
-        LOG.info(f"Deleting Provider {koku_uuid} for Source ID: {source_id}")
-        coordinator = SourcesProviderCoordinator(source_id, auth_header)
-        coordinator.destroy_account(koku_uuid)
-    except Provider.DoesNotExist:
-        LOG.info(f"Provider {koku_uuid} does not exist.  Unable to mark as inactive")
+    LOG.info(f"Deactivating Provider {koku_uuid}")
+    mark_provider_as_inactive(koku_uuid)
+    LOG.info(f"Deleting Provider {koku_uuid} for Source ID: {source_id}")
+    coordinator = SourcesProviderCoordinator(source_id, auth_header)
+    coordinator.destroy_account(koku_uuid)
 
 
 @celery_app.task(name="sources.tasks.delete_source_beat", queue=REMOVE_EXPIRED_DATA_QUEUE)

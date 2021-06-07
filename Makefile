@@ -323,7 +323,7 @@ _koku-wait:
      done
 
 app-log-permissions:
-	[[ ! -f ./koku/app.log ]] && touch ./koku/app.log
+	[[ ! -f ./koku/app.log ]] && $(PREFIX) touch ./koku/app.log || true
 	$(PREFIX) chmod a+rw ./koku/app.log
 	$(PREFIX) chown root:$$USER ./koku/app.log
 

@@ -33,7 +33,7 @@ django-prometheus==2.1.0
 django-redis==4.12.1
 django-tenant-schemas==1.10.0
 django==3.1.10
-djangorestframework-csv==2.1.0
+djangorestframework-csv==2.1.1
 djangorestframework==3.12.4
 flake8==3.9.2
 google-api-core[grpc]==1.26.3

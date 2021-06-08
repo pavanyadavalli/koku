@@ -24,6 +24,34 @@ CREATE TEMPORARY TABLE ocp_cluster_capacity_{{uuid | sqlsafe}} AS (
             date(cc.interval_start)
 );
 
+CREATE TEMPORARY TABLE ocp_node_capacity_{{uuid | sqlsafe}} AS (
+    SELECT cc.node,
+        date(cc.interval_start) as usage_start,
+        cc.report_id,
+        sum(cc.node_capacity_cpu_core_seconds) as node_capacity_cpu_core_seconds,
+        sum(cc.node_capacity_memory_byte_seconds) as node_capacity_memory_byte_seconds
+    FROM (
+        SELECT li.node,
+            ur.interval_start,
+            li.report_id,
+            max(li.node_capacity_cpu_core_seconds) as node_capacity_cpu_core_seconds,
+            max(li.node_capacity_memory_byte_seconds) as node_capacity_memory_byte_seconds
+        FROM {{schema | sqlsafe}}.reporting_ocpusagelineitem AS li
+        JOIN {{schema | sqlsafe}}.reporting_ocpusagereport AS ur
+            ON li.report_id = ur.id
+        JOIN {{schema | sqlsafe}}.reporting_ocpusagereportperiod AS rp
+            ON li.report_period_id = rp.id
+        WHERE date(ur.interval_start) >= {{start_date}}
+            AND date(ur.interval_start) <= {{end_date}}
+        GROUP BY ur.interval_start,
+            li.report_id,
+            li.node
+        ) AS cc
+        GROUP BY cc.node,
+            date(cc.interval_start),
+            cc.report_id
+);
+
 -- Place our query in a temporary table
 CREATE TEMPORARY TABLE reporting_ocpusagelineitem_daily_{{uuid | sqlsafe}} AS (
     SELECT  li.report_period_id,
@@ -43,9 +71,9 @@ CREATE TEMPORARY TABLE reporting_ocpusagelineitem_daily_{{uuid | sqlsafe}} AS (
         sum(li.pod_request_memory_byte_seconds) as pod_request_memory_byte_seconds,
         sum(li.pod_limit_memory_byte_seconds) as pod_limit_memory_byte_seconds,
         max(li.node_capacity_cpu_cores) as node_capacity_cpu_cores,
-        sum(li.node_capacity_cpu_core_seconds) as node_capacity_cpu_core_seconds,
+        max(nc.node_capacity_cpu_core_seconds) as node_capacity_cpu_core_seconds,
         max(li.node_capacity_memory_bytes) as node_capacity_memory_bytes,
-        sum(li.node_capacity_memory_byte_seconds) as node_capacity_memory_byte_seconds,
+        max(nc.node_capacity_memory_byte_seconds) as node_capacity_memory_byte_seconds,
         max(cc.cluster_capacity_cpu_core_seconds) as cluster_capacity_cpu_core_seconds,
         max(cc.cluster_capacity_memory_byte_seconds) as cluster_capacity_memory_byte_seconds,
         count(ur.interval_start) * 3600 as total_seconds
@@ -57,6 +85,10 @@ CREATE TEMPORARY TABLE reporting_ocpusagelineitem_daily_{{uuid | sqlsafe}} AS (
     JOIN ocp_cluster_capacity_{{uuid | sqlsafe}} AS cc
         ON rp.cluster_id = cc.cluster_id
             AND date(ur.interval_start) = cc.usage_start
+    JOIN ocp_node_capacity_{{uuid | sqlsafe }} AS nc
+        ON li.node = nc.node
+            AND date(ur.interval_start) = nc.usage_start
+            AND li.report_id = nc.report_id
     LEFT JOIN {{schema | sqlsafe}}.reporting_ocpnodelabellineitem AS nli
             ON li.report_id = nli.report_id
                 AND li.node = nli.node
@@ -82,6 +114,9 @@ CREATE TEMPORARY TABLE reporting_ocpusagelineitem_daily_{{uuid | sqlsafe}} AS (
 TRUNCATE TABLE ocp_cluster_capacity_{{uuid | sqlsafe}};
 DROP TABLE ocp_cluster_capacity_{{uuid | sqlsafe}};
 
+-- no need to wait on commit
+TRUNCATE TABLE ocp_node_capacity_{{uuid | sqlsafe}};
+DROP TABLE ocp_node_capacity_{{uuid | sqlsafe}};
 
 -- Clear out old entries first
 DELETE FROM {{schema | sqlsafe}}.reporting_ocpusagelineitem_daily

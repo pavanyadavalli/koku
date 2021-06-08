@@ -322,21 +322,24 @@ _koku-wait:
          sleep 1 ; \
      done
 
-app-log-permissions:
-	[[ ! -f ./koku/app.log ]] && $(PREFIX) touch ./koku/app.log || true
-	$(PREFIX) chmod a+rw ./koku/app.log
-	$(PREFIX) chown root:$$USER ./koku/app.log
+app-permissions:
+	ifneq ($(OS),Darwin)
+	    [[ ! -f ./koku/app.log ]] && $(PREFIX) touch ./koku/app.log || true
+		$(PREFIX) chmod a+rw ./koku/app.log
+		$(PREFIX) chown root:$$USER ./koku/app.log
+		find ./testing -type d -exec $(PREFIX) chmod a+rwx {} \;
+	endif
 
-docker-up: app-log-permissions
+docker-up: app-permissions
 	$(DOCKER_COMPOSE) up --build -d --scale koku-worker=$(scale)
 
-docker-up-no-build: app-log-permissions docker-up-db
+docker-up-no-build: app-permissions docker-up-db
 	$(DOCKER_COMPOSE) up -d --scale koku-worker=$(scale)
 
-docker-up-min: app-log-permissions
+docker-up-min: app-permissions
 	$(DOCKER_COMPOSE) up --build -d --scale koku-worker=$(scale) db redis koku-server masu-server koku-worker
 
-docker-up-min-no-build: app-log-permissions docker-up-db
+docker-up-min-no-build: app-permissions docker-up-db
 	$(DOCKER_COMPOSE) up -d --scale koku-worker=$(scale) redis koku-server masu-server koku-worker koku-listener
 
 docker-up-min-presto: docker-up-min docker-presto-up

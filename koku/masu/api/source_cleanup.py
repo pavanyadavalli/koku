@@ -37,42 +37,56 @@ def cleanup(request):
         errmsg = "Parameter missing. Options: providers_without_sources, out_of_order_deletes, or missing_sources"
         return Response({"Error": errmsg}, status=status.HTTP_400_BAD_REQUEST)
 
+    source_uuid = params.get("uuid")
+    LOG.info(f"Source Cleanup for UUID: {source_uuid}")
     response = {}
     if "providers_without_sources" in params.keys():
-        response["providers_without_sources"] = _providers_without_sources()
-        if request.method == "DELETE":
-            cleanup_provider_without_source(response)
-            return Response({"job_queued": "providers_without_sources"})
-        else:
-            providers_without_sources = []
-            for provider in response["providers_without_sources"]:
-                providers_without_sources.append(f"{provider.name} ({provider.uuid})")
-                response["providers_without_sources"] = providers_without_sources
-            return Response(response)
+        response["providers_without_sources"] = _providers_without_sources(source_uuid)
+        return handle_providers_without_sources_response(request, response, source_uuid)
 
     if "out_of_order_deletes" in params.keys():
         response["out_of_order_deletes"] = _sources_out_of_order_deletes()
-        if request.method == "DELETE":
-            cleanup_out_of_order_deletes(response)
-            return Response({"job_queued": "out_of_order_deletes"})
-        else:
-            out_of_order_delete = []
-            for source in response["out_of_order_deletes"]:
-                out_of_order_delete.append(f"Source ID: {source.source_id})")
-                response["out_of_order_deletes"] = out_of_order_delete
-            return Response(response)
+        return handle_out_of_order_deletes_response(request, response)
 
     if "missing_sources" in params.keys():
-        response["missing_sources"] = _missing_sources()
-        if request.method == "DELETE":
-            cleanup_missing_sources(response)
-            return Response({"job_queued": "missing_sources"})
-        else:
-            missing_sources = []
-            for source in response["missing_sources"]:
-                missing_sources.append(f"Source ID: {source.source_id})")
-                response["missing_sources"] = missing_sources
-            return Response(response)
+        response["missing_sources"] = _missing_sources(source_uuid)
+        return handle_missing_sources_response(request, response, source_uuid)
+
+
+def handle_providers_without_sources_response(request, response, source_uuid):
+    if request.method == "DELETE":
+        cleanup_provider_without_source(response)
+        return Response({"job_queued": "providers_without_sources"})
+    else:
+        providers_without_sources = []
+        for provider in response["providers_without_sources"]:
+            providers_without_sources.append(f"{provider.name} ({provider.uuid})")
+            response["providers_without_sources"] = providers_without_sources
+        return Response(response)
+
+
+def handle_out_of_order_deletes_response(request, response):
+    if request.method == "DELETE":
+        cleanup_out_of_order_deletes(response)
+        return Response({"job_queued": "out_of_order_deletes"})
+    else:
+        out_of_order_delete = []
+        for source in response["out_of_order_deletes"]:
+            out_of_order_delete.append(f"Source ID: {source.source_id})")
+            response["out_of_order_deletes"] = out_of_order_delete
+        return Response(response)
+
+
+def handle_missing_sources_response(request, response, source_uuid):
+    if request.method == "DELETE":
+        cleanup_missing_sources(response)
+        return Response({"job_queued": "missing_sources"})
+    else:
+        missing_sources = []
+        for source in response["missing_sources"]:
+            missing_sources.append(f"Source ID: {source.source_id})")
+            response["missing_sources"] = missing_sources
+        return Response(response)
 
 
 def cleanup_provider_without_source(cleaning_list):
@@ -99,8 +113,11 @@ def cleanup_missing_sources(cleaning_list):
             LOG.info(f"Queuing missing source delete Source ID: {str(source.source_id)}.  Async ID: {str(async_id)}")
 
 
-def _providers_without_sources():
-    providers = Provider.objects.all()
+def _providers_without_sources(provider_uuid=None):
+    if provider_uuid:
+        providers = Provider.objects.filter(uuid=provider_uuid)
+    else:
+        providers = Provider.objects.all()
 
     providers_without_sources = []
     for provider in providers:
@@ -124,8 +141,11 @@ def _sources_out_of_order_deletes():
     return sources_out_of_order_delete
 
 
-def _missing_sources():
-    sources = Sources.objects.all()
+def _missing_sources(source_uuid):
+    if source_uuid:
+        sources = Sources.objects.filter(source_uuid=source_uuid)
+    else:
+        sources = Sources.objects.all()
 
     missing_sources = []
     for source in sources:

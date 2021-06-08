@@ -323,12 +323,14 @@ _koku-wait:
      done
 
 app-permissions:
-	ifneq ($(OS),Darwin)
-	    [[ ! -f ./koku/app.log ]] && $(PREFIX) touch ./koku/app.log || true
-		$(PREFIX) chmod a+rw ./koku/app.log
-		$(PREFIX) chown root:$$USER ./koku/app.log
-		find ./testing -type d -exec $(PREFIX) chmod a+rwx {} \;
-	endif
+ifneq ($(OS),Darwin)
+	[[ ! -f ./koku/app.log ]] && $(PREFIX) touch ./koku/app.log || true
+	$(PREFIX) chmod a+rw ./koku/app.log
+	$(PREFIX) chown root:$$USER ./koku/app.log
+	find ./testing -type d -exec $(PREFIX) chmod a+rwx {} \;
+else
+	true
+endif
 
 docker-up: app-permissions
 	$(DOCKER_COMPOSE) up --build -d --scale koku-worker=$(scale)

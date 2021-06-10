@@ -8,6 +8,7 @@ import json
 import logging
 from os import path
 from os import remove
+from api.common import log_json
 
 import ciso8601
 from django.conf import settings
@@ -58,7 +59,7 @@ class ProcessedReport:
 class AWSReportProcessor(ReportProcessorBase):
     """Cost Usage Report processor."""
 
-    def __init__(self, schema_name, report_path, compression, provider_uuid, manifest_id=None):
+    def __init__(self, schema_name, report_path, compression, provider_uuid, manifest_id=None, context=None):
         """Initialize the report processor.
 
         Args:
@@ -81,6 +82,7 @@ class AWSReportProcessor(ReportProcessorBase):
         self._report_name = path.basename(report_path)
         self._datetime_format = Config.AWS_DATETIME_STR_FORMAT
         self._batch_size = Config.REPORT_PROCESSING_BATCH_SIZE
+        self.context = context
 
         # Gather database accessors
 
@@ -95,12 +97,13 @@ class AWSReportProcessor(ReportProcessorBase):
         self.line_item_columns = None
         self.table_name = AWSCostEntryLineItem()
         stmt = (
-            f"Initialized report processor for:\n"
-            f" schema_name: {self._schema}\n"
-            f" provider_uuid: {provider_uuid}\n"
+            f"Initialized report processor for: "
+            f" schema_name: {self._schema} "
+            f" provider_uuid: {provider_uuid} "
             f" file: {self._report_name}"
         )
-        LOG.info(stmt)
+        LOG.info(log_json(self.context.get('request_id'), stmt))
+
 
     def process(self):  # noqa: C901
         """Process CUR file.
@@ -179,7 +182,8 @@ class AWSReportProcessor(ReportProcessorBase):
                 if self.processed_report.line_items:
                     report_db.merge_temp_table(self.table_name._meta.db_table, temp_table, self.line_item_columns)
 
-        LOG.info("Completed report processing for file: %s and schema: %s", self._report_name, self._schema)
+        stmt = f"Completed report processing for file: {self._report_name} and schema: {self._schema}"
+        LOG.info(log_json(self.context.get('request_id'), stmt))
 
         if not settings.DEVELOPMENT:
             LOG.info("Removing processed file: %s", self._report_path)

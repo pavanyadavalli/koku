@@ -79,6 +79,7 @@ class ReportProcessor:
                 compression=self.compression,
                 provider_uuid=self.provider_uuid,
                 manifest_id=self.manifest_id,
+                context=self.context,
             )
 
         if self.provider_type in (Provider.PROVIDER_AZURE, Provider.PROVIDER_AZURE_LOCAL):

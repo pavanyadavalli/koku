@@ -12,6 +12,7 @@ import ciso8601
 from dateutil.relativedelta import relativedelta
 from tenant_schemas.utils import schema_context
 
+from api.common import log_json
 from api.models import Provider
 from masu.database.koku_database_access import mini_transaction_delete
 from masu.database.provider_db_accessor import ProviderDBAccessor
@@ -32,7 +33,7 @@ class ReportProcessorBase:
     Base object class for downloading cost reports from a cloud provider.
     """
 
-    def __init__(self, schema_name, report_path, compression, provider_uuid, manifest_id, processed_report):
+    def __init__(self, schema_name, report_path, compression, provider_uuid, manifest_id, processed_report, context=None):
         """Initialize the report processor base class.
 
         Args:
@@ -53,6 +54,7 @@ class ReportProcessorBase:
         self._manifest_id = manifest_id
         self.processed_report = processed_report
         self.date_accessor = DateAccessor()
+        self.context = context
 
     @property
     def data_cutoff_date(self):
@@ -159,17 +161,17 @@ class ReportProcessorBase:
             provider_uuid = manifest.provider_id
 
         log_statement = (
-            f"Processing bill starting on {bill_date}.\n"
-            f" Processing entire month.\n"
-            f" schema_name: {self._schema},\n"
-            f" provider_uuid: {self._provider_uuid},\n"
+            f"Processing bill starting on {bill_date}. "
+            f" Processing entire month. "
+            f" schema_name: {self._schema}, "
+            f" provider_uuid: {self._provider_uuid}, "
             f" manifest_id: {self._manifest_id}"
         )
 
         if (bill_date.month != self.data_cutoff_date.month) or (
             bill_date.year != self.data_cutoff_date.year and bill_date.month == self.data_cutoff_date.month
         ):
-            LOG.info(log_statement)
+            LOG.info(log_json(self.context.get('request_id'), log_statement))
             return True
 
         manifest_list = manifest_accessor.get_manifest_list_for_provider_and_bill_date(provider_uuid, bill_date)
@@ -184,13 +186,13 @@ class ReportProcessorBase:
             with ReportManifestDBAccessor() as manifest_accessor:
                 if manifest_accessor.manifest_ready_for_summary(manifest.id):
                     log_statement = (
-                        f"Processing bill starting on {bill_date}.\n"
-                        f" Processing data on or after {self.data_cutoff_date}.\n"
-                        f" schema_name: {self._schema},\n"
-                        f" provider_uuid: {self._provider_uuid},\n"
+                        f"Processing bill starting on {bill_date}. "
+                        f" Processing data on or after {self.data_cutoff_date}. "
+                        f" schema_name: {self._schema}, "
+                        f" provider_uuid: {self._provider_uuid}, "
                         f" manifest_id: {self._manifest_id}"
                     )
-                    LOG.info(log_statement)
+                    LOG.info(log_json(self.context.get('request_id'), log_statement))
                     # We have fully processed a manifest for this provider
                     return False
 
@@ -229,14 +231,14 @@ class ReportProcessorBase:
                         # and only need to delete a small window of data
                         line_item_query = line_item_query.filter(**date_filter)
                     log_statement = (
-                        f"Deleting data for:\n"
-                        f" schema_name: {self._schema}\n"
-                        f" provider_uuid: {provider_uuid}\n"
-                        f" bill date: {str(bill_date)}\n"
-                        f" bill ID: {bill.id}\n"
+                        f"Deleting data for: "
+                        f" schema_name: {self._schema} "
+                        f" provider_uuid: {provider_uuid} "
+                        f" bill date: {str(bill_date)} "
+                        f" bill ID: {bill.id} "
                         f" on or after {delete_date}."
                     )
-                    LOG.info(log_statement)
+                    LOG.info(log_json(self.context.get('request_id'), log_statement))
                     del_count, remainder = mini_transaction_delete(line_item_query)
                     LOG.info(f"Deleted {del_count} records for bill id {bill.id}")
 

@@ -6,6 +6,7 @@
 import calendar
 import datetime
 import logging
+from api.common import log_json
 
 from tenant_schemas.utils import schema_context
 
@@ -21,7 +22,7 @@ LOG = logging.getLogger(__name__)
 class AWSReportSummaryUpdater:
     """Class to update AWS report summary data."""
 
-    def __init__(self, schema, provider, manifest):
+    def __init__(self, schema, provider, manifest, tracing_id=None):
         """Establish the database connection.
 
         Args:
@@ -32,6 +33,7 @@ class AWSReportSummaryUpdater:
         self._provider = provider
         self._manifest = manifest
         self._date_accessor = DateAccessor()
+        self._tracing_id = tracing_id
 
     def update_daily_tables(self, start_date, end_date):
         """Populate the daily tables for reporting.
@@ -57,13 +59,9 @@ class AWSReportSummaryUpdater:
 
         with AWSReportDBAccessor(self._schema) as accessor:
             for start, end in date_range_pair(start_date, end_date):
-                LOG.info(
-                    "Updating AWS report daily tables for \n\tSchema: %s" "\n\tProvider: %s \n\tDates: %s - %s",
-                    self._schema,
-                    self._provider.uuid,
-                    start,
-                    end,
-                )
+                stmt = f"Updating AWS report daily tables for Schema: {self._schema} Provider: {self._provider.uuid} Dates: {start} - {end}"
+                LOG.info(log_json(self._tracing_id, stmt))
+
                 accessor.populate_line_item_daily_table(start, end, bill_ids)
 
         return start_date, end_date
@@ -94,13 +92,8 @@ class AWSReportSummaryUpdater:
             # Need these bills on the session to update dates after processing
             bills = accessor.bills_for_provider_uuid(self._provider.uuid, start_date)
             for start, end in date_range_pair(start_date, end_date):
-                LOG.info(
-                    "Updating AWS report summary tables: \n\tSchema: %s" "\n\tProvider: %s \n\tDates: %s - %s",
-                    self._schema,
-                    self._provider.uuid,
-                    start,
-                    end,
-                )
+                stmt = f"Updating AWS report summary tables: {self._schema} Provider: {self._provider.uuid} Dates: {start} - {end}"
+                LOG.info(log_json(self._tracing_id, stmt))
                 accessor.populate_line_item_daily_summary_table(start, end, bill_ids)
             accessor.populate_tags_summary_table(bill_ids, start_date, end_date)
             for bill in bills:

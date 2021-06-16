@@ -39,6 +39,38 @@ class OCPReportQueryHandler(ReportQueryHandler):
         self.group_by_options = self._mapper.provider_map.get("group_by_options")
         self._limit = parameters.get_filter("limit")
 
+        # We need to overwrite the default pack definitions with these
+        # Order of the dictionary matters
+        ocp_pack_keys = {
+            "infra_raw": {"key": "raw", "group": "infrastructure"},
+            "infra_markup": {"key": "markup", "group": "infrastructure"},
+            "infra_usage": {"key": "usage", "group": "infrastructure"},
+            "infra_distributed": {"key": "distributed", "group": "infrastructure"},
+            "infra_total": {"key": "total", "group": "infrastructure"},
+            "sup_raw": {"key": "raw", "group": "supplementary"},
+            "sup_markup": {"key": "markup", "group": "supplementary"},
+            "sup_usage": {"key": "usage", "group": "supplementary"},
+            "sup_distributed": {"key": "distributed", "group": "supplementary"},
+            "sup_total": {"key": "total", "group": "supplementary"},
+            "cost_raw": {"key": "raw", "group": "cost"},
+            "cost_markup": {"key": "markup", "group": "cost"},
+            "cost_usage": {"key": "usage", "group": "cost"},
+            "cost_distributed": {"key": "distributed", "group": "cost"},
+            "cost_total": {"key": "total", "group": "cost"},
+        }
+        ocp_pack_definitions = copy.deepcopy(self._mapper.PACK_DEFINITIONS)
+        ocp_pack_definitions["cost_groups"]["keys"] = ocp_pack_keys
+        LOG.info("\n\n\n\n")
+        LOG.info("my defs")
+        LOG.info(ocp_pack_definitions)
+        LOG.info("\n")
+        LOG.info("orginals")
+        LOG.info(self._mapper.PACK_DEFINITIONS)
+        LOG.info("\n\n\n\n")
+        LOG.info("updates")
+        self._mapper.PACK_DEFINITIONS = ocp_pack_definitions
+        LOG.info(self._mapper.PACK_DEFINITIONS)
+
         # super() needs to be called after _mapper and _limit is set
         super().__init__(parameters)
         # super() needs to be called before _get_group_by is called
@@ -80,6 +112,7 @@ class OCPReportQueryHandler(ReportQueryHandler):
         output = self._initialize_response_output(self.parameters)
         output["data"] = self.query_data
 
+        # TODO: Modify the pack definitions to include
         self.query_sum = self._pack_data_object(self.query_sum, **self._mapper.PACK_DEFINITIONS)
         output["total"] = self.query_sum
 

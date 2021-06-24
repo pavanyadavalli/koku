@@ -77,23 +77,18 @@ def create_daily_archives(request_id, account, provider_uuid, filename, filepath
     daily_file_names = []
 
     if settings.ENABLE_S3_ARCHIVING or enable_trino_processing(provider_uuid, Provider.PROVIDER_OCP, account):
-        daily_files = divide_csv_daily(filepath, filename)
+        # daily_files = divide_csv_daily(filepath, filename)
+        daily_files = [filepath]
         for daily_file in daily_files:
             # Push to S3
             s3_csv_path = get_path_prefix(
                 account, Provider.PROVIDER_OCP, provider_uuid, start_date, Config.CSV_DATA_TYPE
             )
             copy_local_report_file_to_s3_bucket(
-                request_id,
-                s3_csv_path,
-                daily_file.get("filepath"),
-                daily_file.get("filename"),
-                manifest_id,
-                start_date,
-                context,
+                request_id, s3_csv_path, filepath, filename, manifest_id, start_date, context
             )
-            daily_file_names.append(daily_file.get("filepath"))
-    return daily_file_names
+            daily_file_names.append(filepath)
+    return [filepath]
 
 
 class OCPReportDownloader(ReportDownloaderBase, DownloaderInterface):

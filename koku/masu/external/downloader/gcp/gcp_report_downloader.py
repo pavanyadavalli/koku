@@ -342,6 +342,13 @@ class GCPReportDownloader(ReportDownloaderBase, DownloaderInterface):
         """
         return report
 
+    def build_query_select_statement(self):
+        """Helper to build query select statement."""
+        columns_list = self.gcp_big_query_columns.copy()
+        columns_list.append("DATE(_PARTITIONTIME) as parition_time")
+
+        return ",".join(columns_list)
+
     def download_file(self, key, stored_etag=None, manifest_id=None, start_date=None):
         """
         Download a file from GCP storage bucket.
@@ -361,24 +368,26 @@ class GCPReportDownloader(ReportDownloaderBase, DownloaderInterface):
             filename = os.path.splitext(key)[0]
             date_range = filename.split("_")[-1]
             scan_start, scan_end = date_range.split(":")
+            LOG.info(f"GCP Downloader scan_start: {scan_start} scan_end: {scan_end}")
             if start_date:
                 invoice_month = start_date.strftime("%Y%m")
                 query = f"""
-                SELECT {",".join(self.gcp_big_query_columns)}
+                SELECT {self.build_query_select_statement()}
                 FROM {self.table_name}
-                WHERE usage_start_time >= '{scan_start}'
-                AND usage_start_time < '{scan_end}'
+                WHERE DATE(_PARTITIONTIME) >= '{scan_start}'
+                AND DATE(_PARTITIONTIME) < '{scan_end}'
                 AND invoice.month = '{invoice_month}'
                 """
                 LOG.info(f"Using querying for invoice_month ({invoice_month})")
             else:
                 query = f"""
-                SELECT {",".join(self.gcp_big_query_columns)}
+                SELECT {self.build_query_select_statement()}
                 FROM {self.table_name}
-                WHERE usage_start_time >= '{scan_start}'
-                AND usage_start_time < '{scan_end}'
+                WHERE DATE(_PARTITIONTIME) >= '{scan_start}'
+                AND DATE(_PARTITIONTIME) < '{scan_end}'
                 """
             client = bigquery.Client()
+            LOG.info(f"{query}")
             query_job = client.query(query)
         except GoogleCloudError as err:
             err_msg = (
@@ -400,7 +409,10 @@ class GCPReportDownloader(ReportDownloaderBase, DownloaderInterface):
         try:
             with open(full_local_path, "w") as f:
                 writer = csv.writer(f)
-                writer.writerow(self.gcp_big_query_columns)
+                column_list = self.gcp_big_query_columns.copy()
+                column_list.append("partition_date")
+                LOG.info(f"writing columns: {column_list}")
+                writer.writerow(column_list)
                 for row in query_job:
                     writer.writerow(row)
         except (OSError, IOError) as exc:

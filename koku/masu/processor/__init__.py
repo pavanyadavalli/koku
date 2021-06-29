@@ -7,6 +7,7 @@ import logging
 
 from django.conf import settings
 
+from koku.feature_flags import UNLEASH_CLIENT
 from masu.external import GZIP_COMPRESSED
 from masu.external import UNCOMPRESSED
 
@@ -20,12 +21,7 @@ def enable_trino_processing(source_uuid, source_type, account):  # noqa
     if account and not account.startswith("acct"):
         account = f"acct{account}"
 
+    context = {"schema": account, "source-type": source_type, "sourceUUID": source_uuid}
+
     LOG.debug(f"enable_trino_processing({source_uuid}, {source_type}, {account})")
-    if (
-        settings.ENABLE_PARQUET_PROCESSING
-        or source_uuid in settings.ENABLE_TRINO_SOURCES
-        or source_type in settings.ENABLE_TRINO_SOURCE_TYPE
-        or account in settings.ENABLE_TRINO_ACCOUNTS
-    ):
-        return True
-    return False
+    return settings.ENABLE_PARQUET_PROCESSING or UNLEASH_CLIENT.is_enabled("trino-processor", context)

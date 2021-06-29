@@ -22,6 +22,16 @@ class Configurator:
         return CLOWDER_ENABLED
 
     @staticmethod
+    def get_feature_flag_host():
+        """Obtain feature flag (Unleash) host."""
+        pass
+
+    @staticmethod
+    def get_feature_flag_port():
+        """Obtain feature flag (Unleash) port."""
+        pass
+
+    @staticmethod
     def get_in_memory_db_host():
         """Obtain in memory (redis) db host."""
         pass
@@ -159,6 +169,16 @@ class Configurator:
 
 class EnvConfigurator(Configurator):
     """Returns information based on the environment data"""
+
+    @staticmethod
+    def get_feature_flag_host():
+        """Obtain feature flag (Unleash) host."""
+        return ENVIRONMENT.get_value("UNLEASH_HOST", default="unleash")
+
+    @staticmethod
+    def get_feature_flag_port():
+        """Obtain feature flag (Unleash) port."""
+        return ENVIRONMENT.get_value("UNLEASH_PORT", default="4242")
 
     @staticmethod
     def get_in_memory_db_host():
@@ -308,6 +328,16 @@ class EnvConfigurator(Configurator):
 
 class ClowderConfigurator(Configurator):
     """Obtain configuration based on using Clowder and app-common."""
+
+    @staticmethod
+    def get_feature_flag_host():
+        """Obtain feature flag (Unleash) host."""
+        return LoadedConfig.featureFlags.hostname
+
+    @staticmethod
+    def get_feature_flag_port():
+        """Obtain feature flag (Unleash) port."""
+        return LoadedConfig.featureFlags.port
 
     @staticmethod
     def get_in_memory_db_host():

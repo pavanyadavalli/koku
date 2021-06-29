@@ -1734,6 +1734,7 @@ objects:
         public:
           enabled: false
     envName: ${ENV_NAME}
+    featureFlags: true
     inMemoryDb: true
     kafkaTopics:
     - topicName: platform.sources.event-stream

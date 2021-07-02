@@ -72,7 +72,7 @@ class QueryParameters:
         self.serializer = caller.serializer
         self.query_handler = caller.query_handler
         self.tag_handler = caller.tag_handler
-
+        self.enabled_tags = caller.enabled_tags
         self.tag_keys = []
         if self.report_type != "tags":
             for tag_model in self.tag_handler:
@@ -108,7 +108,10 @@ class QueryParameters:
     def _get_tag_keys(self, model):
         """Get a list of tag keys to validate filters."""
         with tenant_context(self.tenant):
-            tags = model.objects.values("key")
+            if enabled_tags:
+                tags = self.enabled_tags.objects.values("key")
+            else:
+                tags = model.objects.values("key")
             tag_list = [":".join(["tag", tag.get("key")]) for tag in tags]
             tag_list.extend([":".join(["and:tag", tag.get("key")]) for tag in tags])
             tag_list.extend([":".join(["or:tag", tag.get("key")]) for tag in tags])

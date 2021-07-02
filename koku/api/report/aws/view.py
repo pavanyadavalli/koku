@@ -19,7 +19,7 @@ class AWSView(ReportView):
     serializer = QueryParamSerializer
     query_handler = AWSReportQueryHandler
     tag_handler = [AWSTagsSummary]
-
+    enabled_tags = None
 
 class AWSCostView(AWSView):
     """Get cost data."""

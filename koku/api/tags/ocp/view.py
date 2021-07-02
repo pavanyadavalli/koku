@@ -19,3 +19,4 @@ class OCPTagView(TagView):
     query_handler = OCPTagQueryHandler
     tag_handler = [OCPUsagePodLabelSummary, OCPStorageVolumeLabelSummary]
     permission_classes = [OpenShiftAccessPermission]
+    enabled_tags = None

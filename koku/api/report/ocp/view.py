@@ -11,6 +11,7 @@ from api.report.ocp.serializers import OCPInventoryQueryParamSerializer
 from api.report.view import ReportView
 from reporting.provider.ocp.models import OCPStorageVolumeLabelSummary
 from reporting.provider.ocp.models import OCPUsagePodLabelSummary
+from reporting.provider.ocp.models import OCPEnabledTagKeys
 
 
 class OCPView(ReportView):
@@ -21,6 +22,7 @@ class OCPView(ReportView):
     serializer = OCPInventoryQueryParamSerializer
     query_handler = OCPReportQueryHandler
     tag_handler = [OCPUsagePodLabelSummary, OCPStorageVolumeLabelSummary]
+    enabled_tags = OCPEnabledTagKeys
 
 
 class OCPMemoryView(OCPView):

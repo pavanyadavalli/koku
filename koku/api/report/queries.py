@@ -251,10 +251,17 @@ class ReportQueryHandler(QueryHandler):
             group_by = self.parameters.get_group_by(tag, list())
             filter_ = self.parameters.get_filter(tag, list())
             list_ = list(set(group_by + filter_))  # uniquify the list
+            if ReportQueryHandler.has_wildcard(list_):
+                from reporting.provider.ocp.models import OCPTagsValues
+                tag_key = tag.split(':')[1]
+                tag_value = OCPTagsValues.objects.get(key=tag_key).value
+                list_ = [tag_value]
             if list_ and not ReportQueryHandler.has_wildcard(list_):
                 for item in list_:
                     q_filter = QueryFilter(parameter=item, **filt)
                     filters.add(q_filter)
+
+        LOG.info(f"Tag Filters: {str(filters)}")
         return filters
 
     def _set_operator_specified_tag_filters(self, filters, operator):

@@ -18,3 +18,4 @@ class AWSTagView(TagView):
     query_handler = AWSTagQueryHandler
     tag_handler = [AWSTagsSummary]
     permission_classes = [AwsAccessPermission]
+    enabled_tags = None

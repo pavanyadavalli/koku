@@ -12,6 +12,7 @@ import ciso8601
 from dateutil.relativedelta import relativedelta
 from django.db import connection as conn
 from django.db import transaction
+from django.db.utils import ProgrammingError
 
 
 # If this is detected, the code will try to resolve this to a name
@@ -26,6 +27,7 @@ PARTITION_LIST = "LIST"
 
 # This value from pg_class.relkind denotes a materialized view
 VIEW_TYPE_MATERIALIZED = "MVIEW"
+RELKIND_MATVIEDW = "m"
 
 LOG = logging.getLogger(__name__)
 # SQLFILE = open('/tmp/pg_partition.sql', 'wt')
@@ -159,7 +161,7 @@ class SequenceDefinition:
         name,
         copy_sequence={},
         data_type=BIGINT,
-        min_value=1,
+        min_value="MINVALUE 1",
         max_value=NOMAXVALUE,
         start_with=1,
         increment_by=1,
@@ -191,8 +193,8 @@ class SequenceDefinition:
         self.target_schema = resolve_schema(target_schema)
         self.name = name
         self.data_type = data_type
-        self.min_value = min_value
-        self.max_value = max_value
+        self.min_value = f"MINVALUE {min_value}" if min_value.digits() else min_value
+        self.max_value = f"MAXVALUE {min_value}" if min_value.digits() else min_value
         self.start_with = start_with
         self.increment_by = increment_by
         self.cache = cache
@@ -248,8 +250,8 @@ select t.relname::text as table_name,
         )
         rec = fetchone(cur)
         self.data_type = rec["data_type"]
-        self.min_value = rec["min_value"]
-        self.max_value = rec["max_value"]
+        self.min_value = f'MINVALUE {rec["min_value"]}'
+        self.max_value = f'MAXVALUE {rec["max_value"]}'
         self.start_with = rec["start_value"]
         self.increment_by = rec["increment_by"]
         self.cache = rec["cache_size"]
@@ -295,8 +297,8 @@ select setval(%s::regclass, %s);
 CREATE SEQUENCE "{self.target_schema}"."{self.name}"
        AS {self.data_type}
        INCREMENT BY {self.increment_by}
-       MINVALUE {self.min_value}
-       MAXVALUE {self.max_value}
+       {self.min_value}
+       {self.max_value}
        START WITH {self.start_with}
        CACHE {self.cache}
        {self.cycle} ;
@@ -548,6 +550,8 @@ class ConvertToPartition:
         col_def=[],
         target_schema=CURRENT_SCHEMA,
         source_schema=CURRENT_SCHEMA,
+        exclude_indexes=[],
+        include_indexes=[],
     ):
         """
         Initialize the converter.
@@ -568,15 +572,49 @@ class ConvertToPartition:
         self.partition_type = partition_type
         self.source_schema = resolve_schema(source_schema)
         self.source_table_name = source_table_name
+        self.relkind = self.__get_source_table_kind()
+        self.relkind_pp = self.__relkind_pretty()
         self.pk_def = pk_def
         self.col_def = col_def
-        self.indexes = self.__get_indexes()
+        self.indexes = self.__get_indexes(include_indexes, exclude_indexes)
         self.constraints = self.__get_constraints()
         self.views = self.__get_views()
         self.__new_trigger = self.detect_new_manager_trigger()
 
+        if self.relkind not in "mr":
+            relname = f"{self.source_schema}.{self.source_table_name}"
+            raise TypeError(f"""Cannot convert {self.relkind_pp} "{relname}" to a partitioned table.""")
+
     def __repr__(self):
-        return f"""Convert "{self.source_schema}"."{self.source_table_name}" to a partitioned table"""
+        relname = f"{self.source_schema}.{self.source_table_name}"
+        return f"""Convert {self.relkind_pp} "{relname}" to a partitioned table"""
+
+    def __get_source_table_kind(self):
+        LOG.info(f"Resolving {self.source_schema}.{self.source_table_name} relation kind")
+        sql = """
+select relkind
+  from pg_class
+ where oid = %s::regclass ;
+"""
+        relation = f"{self.source_schema}.{self.source_table_name}"
+        cur = conn_execute(sql, (relation,))
+        res = fetchone(cur)
+        if not res:
+            raise ProgrammingError(f"Relation {relation} does not exit.")
+
+        return res["relkind"]
+
+    def __relkind_pretty(self):
+        if self.relkind == "r":
+            return "table"
+        elif self.relkind == "p":
+            return "partitioned table"
+        elif self.relkind == "m":
+            return "materialized view"
+        elif self.relkind == "v":
+            return "view"
+        else:
+            return "illegal system class"
 
     def view_iter(self, order):
         if order == self.VIEW_DESTROY_ORDER:
@@ -613,7 +651,7 @@ select oid
         return res
 
     def __get_constraints(self):
-        LOG.info(f"Getting constraints for table {self.source_schema}.{self.source_table_name}")
+        LOG.info(f"Getting constraints for {self.relkind_pp} {self.source_schema}.{self.source_table_name}")
         sql = """
 select c.oid::int as constraint_oid,
        n.nspname::text as schema_name,
@@ -661,8 +699,12 @@ select c.oid::int as constraint_oid,
             if rec["constraint_type"] != "p"
         ]
 
-    def __get_indexes(self):
-        LOG.info(f"Getting indexes for table {self.source_schema}.{self.source_table_name}")
+    def __get_indexes(self, include_indexes=[], exclude_indexes=[]):
+        if include_indexes and all(ix is None for ix in include_indexes):
+            LOG.info(f"Skipping index copy for {self.relkind_pp} {self.source_schema}.{self.source_table_name}")
+            return []
+
+        LOG.info(f"Getting indexes for {self.relkind_pp} {self.source_schema}.{self.source_table_name}")
         sql = """
 select n.nspname::text as "schemaname",
        t.relname::text as "tablename",
@@ -691,7 +733,17 @@ select n.nspname::text as "schemaname",
 """
         params = [self.source_schema, self.source_table_name]
         cur = conn_execute(sql, params)
-        return [IndexDefinition(self.target_schema, self.partitioned_table_name, rec) for rec in fetchall(cur)]
+        res = []
+        for rec in fetchall(cur):
+            if exclude_indexes and rec["indexname"] in exclude_indexes:
+                LOG.debug(f"""Excluding index {rec["indexname"]}""")
+                continue
+            if include_indexes and rec["indexname"] not in include_indexes:
+                LOG.debug(f"""Skipping index {rec["indexname"]}""")
+                continue
+            res.append(IndexDefinition(self.target_schema, self.partitioned_table_name, rec))
+
+        return res
 
     def __get_views(self):
         LOG.info(f"Getting views referencing table {self.source_schema}.{self.source_table_name}")
@@ -879,13 +931,27 @@ SELECT level,
   FROM dependency_hierarchy
   left
   join pg_class cls
-    on cls.oid = objid
+    on cls.oid = objid """  # noqa:E501
+        table_where = """
  WHERE array_position(dependency_chain, %s::regclass::oid) is not null
    AND (object_type = ANY('{SCHEMA,TABLE}'::text[]) or
         object_type ~ '^M*VIEW RULE')
  ORDER BY level desc, dependency_chain ;
-"""  # noqa:E501
-        hierarchy = fetchall(conn_execute(hierarchy_sql, [f'"{self.source_schema}"."{self.source_table_name}"']))
+"""
+        matview_where = """
+ WHERE dependency_chain[1] = %s::regnamespace::oid
+   AND dependency_chain[2] = %s::regclass::oid
+   AND object_name != %s
+   AND object_type ~ '^M*VIEW RULE'
+"""
+        if self.relkind == RELKIND_MATVIEDW:
+            params = [self.source_schema, f'"{self.source_schema}"."{self.source_table_name}"', self.source_table_name]
+            where_clause = matview_where
+        else:
+            params = [f'"{self.source_schema}"."{self.source_table_name}"']
+            where_clause = table_where
+
+        hierarchy = fetchall(conn_execute(hierarchy_sql + where_clause, params))
         # The hierarchy will be stored with the lowest level first or in destroy-order
         res = []
         for entry in hierarchy:
@@ -1206,11 +1272,13 @@ SELECT * FROM "{self.source_schema}"."{self.source_table_name}" ;
 
     def __rename_objects_new(self):
         messages = [f'Locking source table "{self.source_schema}"."{self.source_table_name}"']
-        sql_actions = [
-            f"""
+        sql_actions = []
+        if self.relkind != RELKIND_MATVIEDW:
+            sql_actions.append(
+                f"""
 LOCK TABLE "{self.source_schema}"."{self.source_table_name}" ;
 """
-        ]
+            )
         for vdef in self.views:
             actions = vdef.rename_original_view_indexes()
             messages.append(f'Renaming view indexes for "{vdef.view_schema}"."{vdef.view_name}"')
@@ -1282,11 +1350,13 @@ UPDATE "{self.target_schema}".partitioned_tables
 
     def __rename_objects(self):
         LOG.info(f'Locking source table "{self.source_schema}"."{self.source_table_name}"')
-        sql_actions = [
-            f"""
+        sql_actions = []
+        if self.relkind != RELKIND_MATVIEDW:
+            sql_actions.append(
+                f"""
 LOCK TABLE "{self.source_schema}"."{self.source_table_name}" ;
 """
-        ]
+            )
         for vdef in self.views:
             LOG.info(f'Renaming view indexes for "{vdef.view_schema}"."{vdef.view_name}"')
             sql_actions.extend(vdef.rename_original_view_indexes())
@@ -1294,13 +1364,13 @@ LOCK TABLE "{self.source_schema}"."{self.source_table_name}" ;
             sql_actions.append(vdef.rename_original_view())
 
         msg = (
-            f'Renaming source table "{self.source_schema}"."{self.source_table_name}"'
+            f'Renaming source {self.relkind_pp} "{self.source_schema}"."{self.source_table_name}"'
             f' to "__{self.source_table_name}"'
         )
         LOG.info(msg)
         sql_actions.append(
             f"""
-ALTER TABLE "{self.source_schema}"."{self.source_table_name}"
+ALTER {self.relkind_pp.upper()} "{self.source_schema}"."{self.source_table_name}"
 RENAME TO "__{self.source_table_name}" ;
 """
         )
@@ -1438,14 +1508,20 @@ select exists (
         """
         Truncate and drop source table and its dependents.
         """
-        sql = f"""
+        if self.relkind == "m":
+            sql = f"""
+DROP MATERIALIZED VIEW "{self.source_schema}"."{self.source_table_name}" ;
+"""
+            conn.execute(sql)
+        else:
+            sql = f"""
 TRUNCATE TABLE "{self.source_schema}"."{self.source_table_name}" ;
 """
-        conn_execute(sql)
-        sql = f"""
+            conn_execute(sql)
+            sql = f"""
 DROP TABLE "{self.source_schema}"."{self.source_table_name}" CASCADE ;
 """
-        conn_execute(sql)
+            conn_execute(sql)
 
 
 # ====================================================================

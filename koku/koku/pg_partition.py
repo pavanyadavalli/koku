@@ -320,9 +320,10 @@ class ColumnDefinition:
         null=None,
         default=None,
         rename=None,
-        alter=False,
-        add=False,
-        drop=False,
+        # Possible future use
+        # alter=False,
+        # add=False,
+        # drop=False,
     ):
         """
         Initialize a column definition
@@ -336,19 +337,20 @@ class ColumnDefinition:
             default (Default) : The default value to apply. default is None
         """
 
-        alter = bool(alter)
-        add = bool(add)
-        drop = bool(drop)
+        # Possible future use
+        # alter = bool(alter)
+        # add = bool(add)
+        # drop = bool(drop)
 
-        if not (alter or add or drop):
-            alter = True
-        else:
-            if alter:
-                add = drop = False
-            if add:
-                alter = drop = False
-            if drop:
-                alter = add = False
+        # if not (alter or add or drop):
+        #     alter = True
+        # else:
+        #     if alter:
+        #         add = drop = False
+        #     if add:
+        #         alter = drop = False
+        #     if drop:
+        #         alter = add = False
 
         self.target_schema = target_schema
         self.target_table = target_table
@@ -358,36 +360,39 @@ class ColumnDefinition:
         self.null = "NULL" if null else "NOT NULL"
         self.default = default
         self.rename = rename
-        self.add = add
-        self.drop = drop
-        self.alter = alter
+        self.alter = True
+        # Possible Future Use
+        # self.add = add
+        # self.drop = drop
+        # self.alter = alter
 
-    def add_column(self):
-        if not self.add:
-            return []
+    # Possible Future Use
+    #     def add_column(self):
+    #         if not self.add:
+    #             return []
 
-        LOG.info(f"Adding column {self.column_name} {self.data_type}")
-        all_adds = [
-            f"""
-ALTER TABLE "{self.target_schema}"."{self.target_table}"
-  ADD COLUMN "{self.column_name}" {self.data_type} {self.null} {self.default} ;
-"""
-        ]
+    #         LOG.info(f"Adding column {self.column_name} {self.data_type}")
+    #         all_adds = [
+    #             f"""
+    # ALTER TABLE "{self.target_schema}"."{self.target_table}"
+    #   ADD COLUMN "{self.column_name}" {self.data_type} {self.null} {self.default} ;
+    # """
+    #         ]
 
-        return all_adds
+    #         return all_adds
 
-    def drop_column(self):
-        if not self.drop or not self.column_name:
-            return []
+    #     def drop_column(self):
+    #         if not self.drop or not self.column_name:
+    #             return []
 
-        LOG.info(f"Dropping column self.{self.column_name}")
-        all_drops = [
-            f"""
-ALTER TABLE "{self.target_schema}"."{self.target_table}" DROP COLUMN IF EXISTS "{self.column_name}"
-"""
-        ]
+    #         LOG.info(f"Dropping column self.{self.column_name}")
+    #         all_drops = [
+    #             f"""
+    # ALTER TABLE "{self.target_schema}"."{self.target_table}" DROP COLUMN IF EXISTS "{self.column_name}"
+    # """
+    #         ]
 
-        return all_drops
+    #         return all_drops
 
     def alter_column(self):
         if not self.alter:
@@ -1148,11 +1153,12 @@ VALUES (
                 conn_execute(cdef.default.default_value.create())
                 conn_execute(*cdef.default.default_value.setval())
 
-            for col_drop in cdef.drop_column():
-                conn_execute(col_drop)
+            # Possible Future Use
+            # for col_drop in cdef.drop_column():
+            #     conn_execute(col_drop)
 
-            for col_add in cdef.add_column():
-                conn_execute(col_add)
+            # for col_add in cdef.add_column():
+            #     conn_execute(col_add)
 
             for col_alter in cdef.alter_column():
                 conn_execute(col_alter)

@@ -11,7 +11,7 @@ CACHE = {"schema": ppart.resolve_schema(ppart.CURRENT_SCHEMA)}
 # Change reporting_ocpusagelineitem_daily_summary
 # to a partitioned table with the same definition
 # =====================================================
-def convert_matview_to_partition(matview_name, partition_col, seq_def, pk_def, col_defs, exclude_indexes=[], include_indexes=[]):
+def convert_matview_to_partitioned_table(matview_name, partition_col, pk_def, col_defs, exclude_indexes=[], include_indexes=[]):
     # Resolve the current schema name
     target_schema = CACHE['schema']
     source_table = matview_name
@@ -34,82 +34,23 @@ def convert_matview_to_partition(matview_name, partition_col, seq_def, pk_def, c
     p_converter.convert_to_partition()
 
 
-def get_matview_owner(connection, schema_name, matview_name):
-    sql = """
-select relowner::regrole::text
-  from pg_class
- where relnamespace = %s::regnamespace
-   and relkind = 'm'
-   and relname = %s ;
-"""
-    with connection.cursor() as cur:
-        cur.execute(sql, (schema_name, matview_name))
-        res = cur.fetchone()
-
-    return res[0] if res else "current_user"
-
-
-def get_max_matview_id(connection, schema_name, matview_name):
-    sql = f"""
-select count(*) as "max_id"
-  from "{schema_name}"."{matview_name}" ;
-"""
-    with connection.cursor() as cur:
-        cur.execute(sql)
-        res = cur.fetchone()
-
-    return (res[0] if res else 0) + 1
-
-
 def convert_reporting_ocpall_compute_summary(apps, schema_editor):
     matview_name = 'reporting_ocpall_compute_summary'
     id_default = ppart.Default('uuid_generate_v4()')
-
     pk_def = ppart.PKDefinition("reporting_ocpall_compute_summary_pkey", ["usage_start", "id"])
-    col_defs = [
+    col_def = [
         ppart.ColumnDefinition(
             CACHE["schema"],
-            "p_" +
-            matview_name,
+            "p_" + matview_name,
             "id",
             data_type="uuid",
             null=False,
             default=id_default,
-            alter=True,
         ),
     ]
+    exclude_indexes = ["p_ocpaws_compute_summary", "ocpaws_compute_summary"]
 
-
-
-
-def convert_ocpusage_lids_to_partitioned(apps, schema_editor):
-    # This is the table we will model from
-    source_table = "reporting_ocpusagelineitem_daily_summary"
-    # This is the target table's name (it will be renamed during the conversion to the source table name)
-    target_table = f"p_{source_table}"
-    # We'll want a new sequence copied from the original sequence
-    new_seq = ppart.SequenceDefinition(
-        target_schema,
-        f"{target_table}_id_seq",
-        copy_sequence={"schema_name": target_schema, "table_name": source_table, "column_name": "id"},
-    )
-    # We want to change the target tables's 'id' column default
-    target_identity_col = ppart.ColumnDefinition(target_schema, target_table, "id", default=ppart.Default(new_seq))
-    # We also need to include the identity col as part of the primary key definition
-    new_pk = ppart.PKDefinition(f"{target_table}_pkey", ["usage_start", "id"])
-    # Init the converter
-    p_converter = ppart.ConvertToPartition(
-        source_table,
-        "usage_start",
-        target_table_name=target_table,
-        partition_type=ppart.PARTITION_RANGE,
-        pk_def=new_pk,
-        col_def=[target_identity_col],
-        target_schema=target_schema,
-        source_schema=target_schema,
-    )
-    # Push the button, Frank.
-    p_converter.convert_to_partition()
+    convert_matview_to_partitioned_table(matview_name, "usage_start", pk_def, col_def, exclude_indexes=exclude_indexes)
 
 
 class Migration(migrations.Migration):
@@ -119,4 +60,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(convert_reporting_ocpall_compute_summary),
     ]

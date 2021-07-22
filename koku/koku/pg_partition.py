@@ -310,7 +310,20 @@ class ColumnDefinition:
     Define changes to an existing table column that will be applied to the target partitioned table
     """
 
-    def __init__(self, target_schema, target_table, column_name, data_type=None, using=None, null=None, default=None):
+    def __init__(
+        self,
+        target_schema,
+        target_table,
+        column_name,
+        data_type=None,
+        using=None,
+        null=None,
+        default=None,
+        rename=None,
+        alter=False,
+        add=False,
+        drop=False,
+    ):
         """
         Initialize a column definition
         Params:
@@ -322,44 +335,103 @@ class ColumnDefinition:
             null (bool) : True = remove not null constraint; false = apply not null; default is None
             default (Default) : The default value to apply. default is None
         """
+
+        alter = bool(alter)
+        add = bool(add)
+        drop = bool(drop)
+
+        if not (alter or add or drop):
+            alter = True
+        else:
+            if alter:
+                add = drop = False
+            if add:
+                alter = drop = False
+            if drop:
+                alter = add = False
+
         self.target_schema = target_schema
         self.target_table = target_table
         self.column_name = column_name
         self.data_type = data_type
         self.using = using
-        self.null = null
+        self.null = "NULL" if null else "NOT NULL"
         self.default = default
-        self.parent = None
+        self.rename = rename
+        self.add = add
+        self.drop = drop
+        self.alter = alter
+
+    def add_column(self):
+        if not self.add:
+            return []
+
+        LOG.info(f"Adding column {self.column_name} {self.data_type}")
+        all_adds = [
+            f"""
+ALTER TABLE "{self.target_schema}"."{self.target_table}"
+  ADD COLUMN "{self.column_name}" {self.data_type} {self.null} {self.default} ;
+"""
+        ]
+
+        return all_adds
+
+    def drop_column(self):
+        if not self.drop or not self.column_name:
+            return []
+
+        LOG.info(f"Dropping column self.{self.column_name}")
+        all_drops = [
+            f"""
+ALTER TABLE "{self.target_schema}"."{self.target_table}" DROP COLUMN IF EXISTS "{self.column_name}"
+"""
+        ]
+
+        return all_drops
 
     def alter_column(self):
-        LOG.info("Running alter column for column definiton")
-        if not (bool(self.data_type) or bool(self.null) or bool(self.default)):
-            return ""
+        if not self.alter:
+            return []
 
-        alters = []
-        sql = f"""
-ALTER TABLE "{self.target_schema}"."{self.target_table}"
-"""
-        # Possible future use
-        #         if self.data_type:
-        #             using = f"USING {self.using}" if self.using else ""
-        #             alters.append(
-        #                 f"""      ALTER COLUMN "{self.column_name}" SET DATA TYPE {self.data_type} {using}
-        # """
-        #             )
-        #         if self.null is not None:
-        #             alters.append(
-        #                 f"""      ALTER COLUMN "{self.column_name}" SET {'NULL' if self.null else 'NOT NULL'}
-        # """
-        #             )
-        if self.default:
-            LOG.info("Setting default value")
-            alters.append(
-                f"""      ALTER COLUMN "{self.column_name}" SET DEFAULT {self.default}
+        LOG.info(f"Running alter column {self.column_name} for column definiton")
+
+        all_alters = []
+        if self.rename:
+            all_alters.append(
+                f"""
+ALTER TABLE "{self.target_schema}"."{self.target_table}" RENAME COLUMN {self.column_name} TO {self.rename} ;
 """
             )
-        sql += ", ".join(alters) + ";"
-        return sql
+            self.column_name = self.rename
+
+        if bool(self.data_type) or bool(self.null) or bool(self.default):
+            sql = f"""
+ALTER TABLE "{self.target_schema}"."{self.target_table}"
+"""
+
+            alters = []
+            if self.data_type:
+                using = f"USING {self.using}" if self.using else ""
+                alters.append(
+                    f"""      ALTER COLUMN "{self.column_name}" SET DATA TYPE {self.data_type} {using}
+    """
+                )
+            if self.null is not None:
+                alters.append(
+                    f"""      ALTER COLUMN "{self.column_name}" SET {self.null}
+    """
+                )
+            if self.default:
+                LOG.info("Setting default value")
+                alters.append(
+                    f"""      ALTER COLUMN "{self.column_name}" SET DEFAULT {self.default}
+    """
+                )
+
+            sql += ", ".join(alters) + ";"
+            all_alters.append(sql)
+
+        return all_alters
 
 
 class ConstraintDefinition:
@@ -1076,7 +1148,14 @@ VALUES (
                 conn_execute(cdef.default.default_value.create())
                 conn_execute(*cdef.default.default_value.setval())
 
-            conn_execute(cdef.alter_column())
+            for col_drop in cdef.drop_column():
+                conn_execute(col_drop)
+
+            for col_add in cdef.add_column():
+                conn_execute(col_add)
+
+            for col_alter in cdef.alter_column():
+                conn_execute(col_alter)
 
             if default_is_sequence:
                 conn_execute(cdef.default.default_value.alter_owner())

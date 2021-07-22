@@ -193,8 +193,8 @@ class SequenceDefinition:
         self.target_schema = resolve_schema(target_schema)
         self.name = name
         self.data_type = data_type
-        self.min_value = f"MINVALUE {min_value}" if min_value.digits() else min_value
-        self.max_value = f"MAXVALUE {min_value}" if min_value.digits() else min_value
+        self.min_value = f"MINVALUE {min_value}" if isinstance(min_value, int) or min_value.isdigit() else min_value
+        self.max_value = f"MAXVALUE {max_value}" if isinstance(max_value, int) or max_value.isdigit() else max_value
         self.start_with = start_with
         self.increment_by = increment_by
         self.cache = cache
@@ -329,6 +329,7 @@ class ColumnDefinition:
         self.using = using
         self.null = null
         self.default = default
+        self.parent = None
 
     def alter_column(self):
         LOG.info("Running alter column for column definiton")
@@ -1293,7 +1294,7 @@ LOCK TABLE "{self.source_schema}"."{self.source_table_name}" ;
         )
         sql_actions.append(
             f"""
-ALTER TABLE "{self.source_schema}"."{self.source_table_name}"
+ALTER {self.relkind_pp.upper()} "{self.source_schema}"."{self.source_table_name}"
 RENAME TO "__{self.source_table_name}" ;
 """
         )
@@ -1510,9 +1511,9 @@ select exists (
         """
         if self.relkind == "m":
             sql = f"""
-DROP MATERIALIZED VIEW "{self.source_schema}"."{self.source_table_name}" ;
+DROP MATERIALIZED VIEW "{self.source_schema}"."{self.source_table_name}" CASCADE ;
 """
-            conn.execute(sql)
+            conn_execute(sql)
         else:
             sql = f"""
 TRUNCATE TABLE "{self.source_schema}"."{self.source_table_name}" ;

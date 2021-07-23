@@ -630,6 +630,8 @@ class ConvertToPartition:
         source_schema=CURRENT_SCHEMA,
         exclude_indexes=[],
         include_indexes=[],
+        override_indexes=[],
+        column_map={},
     ):
         """
         Initialize the converter.
@@ -654,10 +656,11 @@ class ConvertToPartition:
         self.relkind_pp = self.__relkind_pretty()
         self.pk_def = pk_def
         self.col_def = col_def
-        self.indexes = self.__get_indexes(include_indexes, exclude_indexes)
+        self.indexes = override_indexes if override_indexes else self.__get_indexes(include_indexes, exclude_indexes)
         self.constraints = self.__get_constraints()
         self.views = self.__get_views()
         self.__new_trigger = self.detect_new_manager_trigger()
+        self.column_map = column_map
 
         if self.relkind not in "mr":
             relname = f"{self.source_schema}.{self.source_table_name}"
@@ -822,6 +825,18 @@ select n.nspname::text as "schemaname",
             res.append(IndexDefinition(self.target_schema, self.partitioned_table_name, rec))
 
         return res
+
+    @staticmethod
+    def get_table_columns(table_schema, table_name):
+        sql = """
+select array_agg(attname order by attnum) as cols
+  from pg_attribute
+ where attrelid = %s::regclass
+   and attnum > 0;
+"""
+        cur = conn_execute(sql, (f"{table_schema}.{table_name}",))
+        res = fetchone(cur)
+        return res["cols"]
 
     def __get_views(self):
         LOG.info(f"Getting views referencing table {self.source_schema}.{self.source_table_name}")
@@ -1346,12 +1361,17 @@ select table_name,
         self.created_partitions = fetchall(cur)
 
     def __copy_data(self):
+        if not self.column_map:
+            cols = self.get_table_columns(self.source_schema, self.source_table_name)
+            self.column_map = dict(zip(cols, cols))
+
         c_from = f'"{self.target_schema}"."{self.partitioned_table_name}"'
         c_to = f'"{self.source_schema}"."{self.source_table_name}"'
         LOG.info(f"Copying data from {c_from} to {c_to}")
+        source_cols, target_cols = zip(*self.column_map.items())
         sql = f"""
-INSERT INTO "{self.target_schema}"."{self.partitioned_table_name}"
-SELECT * FROM "{self.source_schema}"."{self.source_table_name}" ;
+INSERT INTO "{self.target_schema}"."{self.partitioned_table_name} ({','.join(target_cols)})"
+SELECT {','.join(source_cols)} FROM "{self.source_schema}"."{self.source_table_name}" ;
 """
         with transaction.atomic():
             conn_execute(sql)

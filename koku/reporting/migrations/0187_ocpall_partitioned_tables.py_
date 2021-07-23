@@ -4,14 +4,18 @@ from django.db import migrations
 from koku import pg_partition as ppart
 
 
-CACHE = {"schema": ppart.resolve_schema(ppart.CURRENT_SCHEMA)}
+CACHE = {}
+
+
+def resolve_schema(*args, **kwargs):
+    CACHE["schema"] = ppart.resolve_schema(ppart.CURRENT_SCHEMA)
 
 
 # =====================================================
 # Change reporting_ocpusagelineitem_daily_summary
 # to a partitioned table with the same definition
 # =====================================================
-def convert_matview_to_partitioned_table(matview_name, partition_col, pk_def, col_defs, exclude_indexes=[], include_indexes=[]):
+def convert_matview_to_partitioned_table(matview_name, partition_col, pk_def, col_defs, indexes=[], column_map={}):
     # Resolve the current schema name
     target_schema = CACHE['schema']
     source_table = matview_name
@@ -27,8 +31,8 @@ def convert_matview_to_partitioned_table(matview_name, partition_col, pk_def, co
         col_def=col_defs,
         target_schema=target_schema,
         source_schema=target_schema,
-        exclude_indexes=exclude_indexes,
-        include_indexes=include_indexes,
+        override_indexes=indexes,
+        column_map=column_map,
     )
     # Push the button, Frank.
     p_converter.convert_to_partition()
@@ -36,8 +40,8 @@ def convert_matview_to_partitioned_table(matview_name, partition_col, pk_def, co
 
 def convert_reporting_ocpall_compute_summary(apps, schema_editor):
     matview_name = 'reporting_ocpall_compute_summary'
-    id_default = ppart.Default('uuid_generate_v4()')
-    pk_def = ppart.PKDefinition("reporting_ocpall_compute_summary_pkey", ["usage_start", "id"])
+    pk_name = f"{matview_name[len('reporting_'):]}_pkey"
+    pk_def = ppart.PKDefinition(pk_name, ["usage_start", "id"])
     col_def = [
         ppart.ColumnDefinition(
             CACHE["schema"],
@@ -45,12 +49,191 @@ def convert_reporting_ocpall_compute_summary(apps, schema_editor):
             "id",
             data_type="uuid",
             null=False,
-            default=id_default,
+            default=ppart.Default('uuid_generate_v4()'),
         ),
     ]
-    exclude_indexes = ["p_ocpaws_compute_summary", "ocpaws_compute_summary"]
+    override_indexes = []
+    cols = ppart.ConvertToPartition.get_table_columns(CACHE["schema"], matview_name)
+    cols.remove('id')
+    column_map = dict(zip(cols, cols))
 
-    convert_matview_to_partitioned_table(matview_name, "usage_start", pk_def, col_def, exclude_indexes=exclude_indexes)
+    convert_matview_to_partitioned_table(matview_name, "usage_start", pk_def, col_def, indexes=override_indexes, column_map=column_map)
+
+
+def convert_reporting_ocpall_network_summary(apps, schema_editor):
+    matview_name = 'reporting_ocpall_network_summary'
+    pk_name = f"{matview_name[len('reporting_'):]}_pkey"
+    pk_def = ppart.PKDefinition(pk_name, ["usage_start", "id"])
+    col_def = [
+        ppart.ColumnDefinition(
+            CACHE["schema"],
+            "p_" + matview_name,
+            "id",
+            data_type="uuid",
+            null=False,
+            default=ppart.Default('uuid_generate_v4()'),
+        ),
+    ]
+    override_indexes = []
+    cols = ppart.ConvertToPartition.get_table_columns(CACHE["schema"], matview_name)
+    cols.remove('id')
+    column_map = dict(zip(cols, cols))
+
+    convert_matview_to_partitioned_table(matview_name, "usage_start", pk_def, col_def, indexes=override_indexes, column_map=column_map)
+
+
+def convert_reporting_ocpall_storage_summary(apps, schema_editor):
+    matview_name = 'reporting_ocpall_storage_summary'
+    pk_name = f"{matview_name[len('reporting_'):]}_pkey"
+    pk_def = ppart.PKDefinition(pk_name, ["usage_start", "id"])
+    col_def = [
+        ppart.ColumnDefinition(
+            CACHE["schema"],
+            "p_" + matview_name,
+            "id",
+            data_type="uuid",
+            null=False,
+            default=ppart.Default('uuid_generate_v4()'),
+        ),
+    ]
+    override_indexes = []
+    cols = ppart.ConvertToPartition.get_table_columns(CACHE["schema"], matview_name)
+    cols.remove('id')
+    column_map = dict(zip(cols, cols))
+
+    convert_matview_to_partitioned_table(matview_name, "usage_start", pk_def, col_def, indexes=override_indexes, column_map=column_map)
+
+
+def convert_reporting_ocpall_database_summary(apps, schema_editor):
+    matview_name = 'reporting_ocpall_database_summary'
+    pk_name = f"{matview_name[len('reporting_'):]}_pkey"
+    pk_def = ppart.PKDefinition(pk_name, ["usage_start", "id"])
+    col_def = [
+        ppart.ColumnDefinition(
+            CACHE["schema"],
+            "p_" + matview_name,
+            "id",
+            data_type="uuid",
+            null=False,
+            default=ppart.Default('uuid_generate_v4()'),
+        ),
+    ]
+    override_indexes = []
+    cols = ppart.ConvertToPartition.get_table_columns(CACHE["schema"], matview_name)
+    cols.remove('id')
+    column_map = dict(zip(cols, cols))
+
+    convert_matview_to_partitioned_table(matview_name, "usage_start", pk_def, col_def, indexes=override_indexes, column_map=column_map)
+
+
+def convert_reporting_ocpall_cost_summary_by_service(apps, schema_editor):
+    matview_name = 'reporting_ocpall_cost_summary_by_service'
+    pk_name = f"{matview_name[len('reporting_'):]}_pkey"
+    pk_def = ppart.PKDefinition(pk_name, ["usage_start", "id"])
+    col_def = [
+        ppart.ColumnDefinition(
+            CACHE["schema"],
+            "p_" + matview_name,
+            "id",
+            data_type="uuid",
+            null=False,
+            default=ppart.Default('uuid_generate_v4()'),
+        ),
+    ]
+    override_indexes = []
+    cols = ppart.ConvertToPartition.get_table_columns(CACHE["schema"], matview_name)
+    cols.remove('id')
+    column_map = dict(zip(cols, cols))
+
+    convert_matview_to_partitioned_table(matview_name, "usage_start", pk_def, col_def, indexes=override_indexes, column_map=column_map)
+
+
+def convert_reporting_ocpall_cost_summary_by_region(apps, schema_editor):
+    matview_name = 'reporting_ocpall_cost_summary_by_region'
+    pk_name = f"{matview_name[len('reporting_'):]}_pkey"
+    pk_def = ppart.PKDefinition(pk_name, ["usage_start", "id"])
+    col_def = [
+        ppart.ColumnDefinition(
+            CACHE["schema"],
+            "p_" + matview_name,
+            "id",
+            data_type="uuid",
+            null=False,
+            default=ppart.Default('uuid_generate_v4()'),
+        ),
+    ]
+    override_indexes = []
+    cols = ppart.ConvertToPartition.get_table_columns(CACHE["schema"], matview_name)
+    cols.remove('id')
+    column_map = dict(zip(cols, cols))
+
+    convert_matview_to_partitioned_table(matview_name, "usage_start", pk_def, col_def, indexes=override_indexes, column_map=column_map)
+
+
+def convert_reporting_ocpall_cost_summary_by_account(apps, schema_editor):
+    matview_name = 'reporting_ocpall_cost_summary_by_account'
+    pk_name = f"{matview_name[len('reporting_'):]}_pkey"
+    pk_def = ppart.PKDefinition(pk_name, ["usage_start", "id"])
+    col_def = [
+        ppart.ColumnDefinition(
+            CACHE["schema"],
+            "p_" + matview_name,
+            "id",
+            data_type="uuid",
+            null=False,
+            default=ppart.Default('uuid_generate_v4()'),
+        ),
+    ]
+    override_indexes = []
+    cols = ppart.ConvertToPartition.get_table_columns(CACHE["schema"], matview_name)
+    cols.remove('id')
+    column_map = dict(zip(cols, cols))
+
+    convert_matview_to_partitioned_table(matview_name, "usage_start", pk_def, col_def, indexes=override_indexes, column_map=column_map)
+
+
+def convert_reporting_ocpall_cost_summary(apps, schema_editor):
+    matview_name = 'reporting_ocpall_cost_summary'
+    pk_name = f"{matview_name[len('reporting_'):]}_pkey"
+    pk_def = ppart.PKDefinition(pk_name, ["usage_start", "id"])
+    col_def = [
+        ppart.ColumnDefinition(
+            CACHE["schema"],
+            "p_" + matview_name,
+            "id",
+            data_type="uuid",
+            null=False,
+            default=ppart.Default('uuid_generate_v4()'),
+        ),
+    ]
+    override_indexes = []
+    cols = ppart.ConvertToPartition.get_table_columns(CACHE["schema"], matview_name)
+    cols.remove('id')
+    column_map = dict(zip(cols, cols))
+
+    convert_matview_to_partitioned_table(matview_name, "usage_start", pk_def, col_def, indexes=override_indexes, column_map=column_map)
+
+
+def convert_reporting_ocpallcostlineitem_daily_summary(apps, schema_editor):
+    matview_name = 'reporting_ocpallcostlineitem_daily_summary'
+    pk_name = f"{matview_name[len('reporting_'):]}_pkey"
+    pk_def = ppart.PKDefinition(pk_name, ["usage_start", "id"])
+    col_def = [
+        ppart.ColumnDefinition(
+            CACHE["schema"],
+            "p_" + matview_name,
+            "id",
+            data_type="uuid",
+            null=False,
+            default=ppart.Default('uuid_generate_v4()'),
+        ),
+    ]
+    override_indexes = []
+    cols = ppart.ConvertToPartition.get_table_columns(CACHE["schema"], matview_name)
+    cols.remove('id')
+    column_map = dict(zip(cols, cols))
+
+    convert_matview_to_partitioned_table(matview_name, "usage_start", pk_def, col_def, indexes=override_indexes, column_map=column_map)
 
 
 class Migration(migrations.Migration):
@@ -60,5 +243,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(resolve_schema),
         migrations.RunPython(convert_reporting_ocpall_compute_summary),
+        migrations.RunPython(convert_reporting_ocpall_network_summary),
+        migrations.RunPython(convert_reporting_ocpall_storage_summary),
+        migrations.RunPython(convert_reporting_ocpall_database_summary),
+        migrations.RunPython(convert_reporting_ocpall_cost_summary_by_service),
+        migrations.RunPython(convert_reporting_ocpall_cost_summary_by_region),
+        migrations.RunPython(convert_reporting_ocpall_cost_summary_by_account),
+        migrations.RunPython(convert_reporting_ocpall_cost_summary),
+        migrations.RunPython(convert_reporting_ocpallcostlineitem_daily_summary),
     ]

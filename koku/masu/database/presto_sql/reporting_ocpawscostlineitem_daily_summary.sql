@@ -29,7 +29,11 @@ INSERT INTO postgres.{{schema | sqlsafe}}.reporting_ocpawscostlineitem_project_d
     project_markup_cost,
     pod_labels,
     tags,
-    source_uuid
+    source_uuid,
+    supplementary_monthly_cost_json,
+    infrastructure_monthly_cost_json,
+    supplementary_project_monthly_cost,
+    infrastructure_project_monthly_cost
 )
 WITH cte_ocp_on_aws_joined AS (
     SELECT aws.uuid as aws_id,
@@ -74,6 +78,26 @@ WITH cte_ocp_on_aws_joined AS (
         max(ocp.persistentvolumeclaim_capacity_gigabyte_months) as persistentvolumeclaim_capacity_gigabyte_months,
         sum(ocp.volume_request_storage_gigabyte_months) as volume_request_storage_gigabyte_months,
         sum(ocp.persistentvolumeclaim_usage_gigabyte_months) as persistentvolumeclaim_usage_gigabyte_months
+        json_build_object(
+            'cpu', sum(((coalesce(ocp.supplementary_monthly_cost_json, '{"cpu": 0}'::jsonb))->>'cpu')::decimal),
+            'memory', sum(((coalesce(ocp.supplementary_monthly_cost_json, '{"memory": 0}'::jsonb))->>'memory')::decimal),
+            'pvc', sum(((coalesce(ocp.supplementary_monthly_cost_json, '{"pvc": 0}'::jsonb))->>'pvc')::decimal)
+        ) as supplementary_monthly_cost_json,
+        json_build_object(
+            'cpu', sum(((coalesce(ocp.infrastructure_monthly_cost_json, '{"cpu": 0}'::jsonb))->>'cpu')::decimal),
+            'memory', sum(((coalesce(ocp.infrastructure_monthly_cost_json, '{"memory": 0}'::jsonb))->>'memory')::decimal),
+            'pvc', sum(((coalesce(ocp.infrastructure_monthly_cost_json, '{"pvc": 0}'::jsonb))->>'pvc')::decimal)
+        ) as infrastructure_monthly_cost_json,
+        json_build_object(
+            'cpu', sum(((coalesce(ocp.supplementary_project_monthly_cost, '{"cpu": 0}'::jsonb))->>'cpu')::decimal),
+            'memory', sum(((coalesce(ocp.supplementary_project_monthly_cost, '{"memory": 0}'::jsonb))->>'memory')::decimal),
+            'pvc', sum(((coalesce(ocp.supplementary_project_monthly_cost, '{"pvc": 0}'::jsonb))->>'pvc')::decimal)
+        ) as supplementary_project_monthly_cost,
+        json_build_object(
+            'cpu', sum(((coalesce(ocp.infrastructure_project_monthly_cost, '{"cpu": 0}'::jsonb))->>'cpu')::decimal),
+            'memory', sum(((coalesce(ocp.infrastructure_project_monthly_cost, '{"memory": 0}'::jsonb))->>'memory')::decimal),
+            'pvc', sum(((coalesce(ocp.infrastructure_project_monthly_cost, '{"pvc": 0}'::jsonb))->>'pvc')::decimal)
+        ) as infrastructure_project_monthly_cost
     FROM hive.{{schema | sqlsafe}}.aws_openshift_daily as aws
     JOIN postgres.{{schema | sqlsafe}}.reporting_ocpusagelineitem_daily_summary as ocp
         ON aws.lineitem_usagestartdate = ocp.usage_start
@@ -155,7 +179,11 @@ SELECT uuid(),
             ) as JSON)
     END as pod_labels,
     json_parse(ocp_aws.tags) as tags,
-    UUID '{{aws_source_uuid | sqlsafe}}' as source_uuid
+    UUID '{{aws_source_uuid | sqlsafe}}' as source_uuid,
+    ocp_aws.supplementary_monthly_cost_json as supplementary_monthly_cost_json,
+    ocp_aws.infrastructure_monthly_cost_json as infrastructure_monthly_cost_json,
+    ocp_aws.supplementary_project_monthly_cost as supplementary_project_monthly_cost,
+    ocp_aws.infrastructure_project_monthly_cost as infrastructure_project_monthly_cost
 FROM cte_ocp_on_aws_joined AS ocp_aws
 JOIN cte_project_counts AS pc
     ON ocp_aws.aws_id = pc.aws_id
